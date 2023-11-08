@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export ρ_leave_one_in, ρ_KF, ρ_leave_one_out, ρ_MLE, ρ_RMSE, ρ_abs
+export ρ_LOI, ρ_KF, ρ_LOO, ρ_MLE, ρ_RMSE, ρ_abs
 
 
 # using Zygote
@@ -23,7 +23,7 @@ using Distances
 using StatsBase
 
 """Version of ρ, where Nc = 1 and we average over all possible Xc."""
-function ρ_leave_one_in(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector) where T
+function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector) where T
     n = length(yₛ)
     Ω = kernel_matrix(Xₛ, k, logθ)
 
@@ -35,7 +35,7 @@ function ρ_leave_one_in(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, 
 end
 
 
- function ρ_leave_one_in_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}) where T
+ function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}) where T
      Ω = kernel_matrix(Xₛ, k, logθ)
 
      return (yₛ' * inv(Symmetric(Ω)) * yₛ)[1]
@@ -102,7 +102,7 @@ end
 
 
 """Leave one out cross validation"""
-function ρ_leave_one_out(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}) where T
+function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}) where T
     Ω = kernel_matrix(X, k, logθ)
     Ω⁻¹ = inv(Ω)
     N = length(y)
