@@ -21,13 +21,12 @@ module KernelFlows
 # functionality that can be used either standalone or with just a few
 # dependencies. The motivation for the code structure is to make it
 # easy to separate these files into their own modules / packages.
+include("kernel_functions.jl")
+include("loss_functions.jl")
 
 include("dimension_reduction.jl")
 include("parametric_models.jl")
 include("nonparametric_models.jl")
-
-include("loss_functions.jl")
-include("kernel_functions.jl")
 
 include("common_utils.jl")
 include("input_transformations.jl")
