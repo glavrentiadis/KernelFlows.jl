@@ -1,0 +1,64 @@
+#  Copyright 2023 California Institute of Technology
+#
+#  Licensed under the Apache License, Version 2.0 (the \"License\");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an \"AS IS\" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+# Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
+#
+
+"""Carries out CCA for input-output pair X,Y"""
+function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs = 50) where T <: Real
+
+    ndata = min(maxdata, size(X)[1])
+    ndx = size(X)[2]
+
+    s = randperm(size(X)[1])[1:ndata]
+    H = @views hcat(X[s,:], Y[s,:]) #  ./ Ystd) # Use max ndata data points
+    C = cov(H)
+
+    Cxx = @view C[1:ndx,1:ndx]
+    Cxy = @view C[ndx+1:end,1:ndx]
+    Cyy = @view C[ndx+1:end,ndx+1:end]
+
+    Cxx[diagind(Cxx)] .*= (1. + reg)
+    Cyy[diagind(Cyy)] .*= (1. + reg)
+
+    CxxI = inv(Cxx)
+    CyyI = inv(Cyy)
+    R_X = CxxI * Cxy' * CyyI * Cxy
+    R_Y = CyyI * Cxy * CxxI * Cxy'
+
+    F_X = fasteigs(R_X, nvecs; force_real = true)
+    F_Y = fasteigs(R_Y, nvecs; force_real = true)
+
+    F_X, F_Y
+end
+
+
+"""Removes direction v from X and returns flattened X and projections
+along the removed direction"""
+function remove_direction(X::Matrix{T}, v::Vector{T}) where T <: Real
+    v ./= sqrt(sum(v.^2)) # normalize v
+    vprojs = sum(X .* v', dims = 2)[:]
+    return X -  vprojs .* v', vprojs
+end
+
+
+"""Removes the directions in columns of M from v and returns
+normalized vector"""
+function GramSchmidt(v::Vector{T}, M::Matrix{T}) where T <: Real
+    projs = M' * v
+    for (i,c) ∈ enumerate(eachcol(M))
+        v .-= projs[i] * c
+    end
+    v ./ sqrt(sum(v.^2))
+end
