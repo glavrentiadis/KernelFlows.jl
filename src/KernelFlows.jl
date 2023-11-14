@@ -25,6 +25,9 @@ include("kernel_functions.jl")
 include("loss_functions.jl")
 
 include("dimension_reduction.jl")
+include("dimension_reduction_new.jl")
+include("cca.jl")
+
 include("parametric_models.jl")
 include("nonparametric_models.jl")
 
