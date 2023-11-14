@@ -72,3 +72,44 @@ end
 function standard_transformations(X::AbstractVector{T}; deg = 2) where T <: Real
     Z = standard_transforms(reshape(X, (length(X), 1)))
 end
+
+
+"""Return transforms that make Y roughly into standard normal, and
+back. Uses (inverse) logcdf transform from Distributions package to
+achieve this, along with barycentric rational interpolation, which
+seems to work really well.  iqr is the interquantile range of the CDF
+that we fit to data. If the function fails, use a smaller
+interquantile range, like 0.98."""
+function gaussianize_transforms(y::Vector{T}; iqr = .99) where T <: Real
+
+    ys = sort(y)
+    no = Normal()
+    ny = length(ys)
+
+    # Don't do transformation at the very edges, the transformations
+    # and inverse transformations become unstable for outliers.
+    quants = collect(0:ny-1) ./ (ny-1) .* iqr .+ (1. - iqr)/2
+
+    idx = [1]
+    y0 = ys[1]
+
+    # use max 1e4 points. Generally more points work better for this method
+    for (i,yy) ∈ enumerate(ys)
+        if yy - y0 > 1e-4  * (ys[end] - ys[1]) || i == ny
+            push!(idx, i)
+            y0 = yy
+        end
+    end
+
+    tr = FHInterp(ys[idx], quants[idx]; order = 1, grid = false)
+    transf(x) = invlogcdf(no, log(tr(x)))
+    tri = FHInterp(quants[idx], ys[idx]; order = 1, grid = false)
+    invtransf(x) = tri(exp(logcdf(no, x)))
+
+    # display(transf.(y))
+    maxerr = maximum(abs.(y - invtransf.(transf.(y))))
+    println("Max absolute error in 2-way transformation: $maxerr")
+
+    return transf, invtransf
+end
+

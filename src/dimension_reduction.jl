@@ -114,32 +114,6 @@ function reduced_unc_to_original(Z::AbstractMatrix{T}, D::DimRedStruct{T};
     [reduced_unc_to_original(z, D; npcs) for z ∈ eachrow(Z)]
 end
 
-"""Returns largest nvecs eigenvectors and singular values of square matrix
-C in a NamedTuple. Uses Arpack if matrix is large since eigen is then
-slow."""
-function fasteigs(C::Matrix{T}, nvecs::Int; force_real::Bool = false) where T <: Real
-
-    d = size(C)[1] # dimension of C
-    nvecs = min(nvecs, d)
-
-    # More accurate, but slow for very large dimension
-    if (d < 500) || (d - nvecs < 2)
-        G = eigen(C)
-        F = (vectors = G.vectors[:,end:-1:end-nvecs+1],
-             values = sqrt.(G.values[end:-1:end-nvecs+1]))
-    # Faster for large dimension
-    else
-        G = Arpack.eigs(C, nev = nvecs)
-        F = (vectors = G[2], values = sqrt.(G[1]))
-    end
-
-    if force_real
-        return (vectors = real.(F.vectors), values = real.(F.values))
-    end
-
-    F
-end
-
 
 """X has data in the rows, i.e. X[3,:] is the third data vector. All
 data will be dimreduced, but eigenvectors will use a limited amount of
@@ -338,42 +312,3 @@ function dimreduce_CCA_PCA_augmented(X::Matrix{T}, Y::Matrix{T};
     return DXs, DY
 end
 
-
-"""Return transforms that make Y roughly into standard normal, and
-back. Uses (inverse) logcdf transform from Distributions package to
-achieve this, along with barycentric rational interpolation, which
-seems to work really well.  iqr is the interquantile range of the CDF
-that we fit to data. If the function fails, use a smaller
-interquantile range, like 0.98."""
-function gaussianize_transforms(y::Vector{T}; iqr = .99) where T <: Real
-
-    ys = sort(y)
-    no = Normal()
-    ny = length(ys)
-
-    # Don't do transformation at the very edges, the transformations
-    # and inverse transformations become unstable for outliers.
-    quants = collect(0:ny-1) ./ (ny-1) .* iqr .+ (1. - iqr)/2
-
-    idx = [1]
-    y0 = ys[1]
-
-    # use max 1e4 points. Generally more points work better for this method
-    for (i,yy) ∈ enumerate(ys)
-        if yy - y0 > 1e-4  * (ys[end] - ys[1]) || i == ny
-            push!(idx, i)
-            y0 = yy
-        end
-    end
-
-    tr = FHInterp(ys[idx], quants[idx]; order = 1, grid = false)
-    transf(x) = invlogcdf(no, log(tr(x)))
-    tri = FHInterp(quants[idx], ys[idx]; order = 1, grid = false)
-    invtransf(x) = tri(exp(logcdf(no, x)))
-
-    # display(transf.(y))
-    maxerr = maximum(abs.(y - invtransf.(transf.(y))))
-    println("Max absolute error in 2-way transformation: $maxerr")
-
-    return transf, invtransf
-end

@@ -62,3 +62,30 @@ function GramSchmidt(v::Vector{T}, M::Matrix{T}) where T <: Real
     end
     v ./ sqrt(sum(v.^2))
 end
+
+
+"""Returns largest nvecs eigenvectors and singular values of square matrix
+C in a NamedTuple. Uses Arpack if matrix is large since eigen is then
+slow."""
+function fasteigs(C::Matrix{T}, nvecs::Int; force_real::Bool = false) where T <: Real
+
+    d = size(C)[1] # dimension of C
+    nvecs = min(nvecs, d)
+
+    # More accurate, but slow for very large dimension
+    if (d < 500) || (d - nvecs < 2)
+        G = eigen(C)
+        F = (vectors = G.vectors[:,end:-1:end-nvecs+1],
+             values = sqrt.(G.values[end:-1:end-nvecs+1]))
+    # Faster for large dimension
+    else
+        G = Arpack.eigs(C, nev = nvecs)
+        F = (vectors = G[2], values = sqrt.(G[1]))
+    end
+
+    if force_real
+        return (vectors = real.(F.vectors), values = real.(F.values))
+    end
+
+    F
+end
