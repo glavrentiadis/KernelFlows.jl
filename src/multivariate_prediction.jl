@@ -15,9 +15,9 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
-                 reduce_X::Bool = true,
+                 reduce_inputs::Bool = true,
                  apply_λ::Bool = true,
-                 recover_Y::Bool = true,
+                 recover_outputs::Bool = true,
                  apply_zyinvtransf::Bool = true,
                  Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
 
@@ -25,10 +25,10 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     nzycols = length(MVM.Ms)
     ZY_pred = zeros(nte, nzycols)
     Threads.@threads for i ∈ Mlist
-        Z = reduce_X ? reduce_X(X, G, i) : X
+        Z = reduce_inputs ? reduce_X(X, MVM.G, i) : X
         nXlinear = MVM.G.Xprojs[i].spec.nCCA
         ZY_pred[:,i] .= predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf, nXlinear)
     end
 
-    return recover_Y ? recover_Y(ZY_pred, MVM.G) : ZY_pred
+    return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred
 end

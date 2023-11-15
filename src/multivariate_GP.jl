@@ -38,7 +38,7 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
     Threads.@threads  for (i,M) ∈ collect(enumerate(MVM.Ms))
-        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear = G.Xprojs[i].spec.nXCCA)
+        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear = MVM.G.Xprojs[i].spec.nCCA)
     end
 
     MVM
@@ -75,8 +75,8 @@ end
 function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Real
     ntr = length(s)
     Ms = [GPModel(M.ζ[s], zeros(ntr), M.Z[s,:], M.λ[:], M.θ[:],
-                  M.kernel, M.zytransf, M.zyinvtransf) for M ∈ MVM.Ms]
-    MVM_new = MVGPModel(Ms, MVM.DY)
+                  M.kernel, M.zytransf, M.zyinvtransf, zero(M.ρ_values)) for M ∈ MVM.Ms]
+    MVM_new = MVGPModel(Ms, MVM.G)
     update_MVGPModel!(MVM_new)
 end
 

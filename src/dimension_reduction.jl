@@ -218,17 +218,17 @@ function recover(Z::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vect
 end
 
 
-function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int)
+function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int) where T <: Real
     reduce(X, G.Xprojs[i], G.μX,  G.σX)
 end
 
 
-function reduce_Y(Y::AbstractMatrix{T}, G::GPGeometry{T})
+function reduce_Y(Y::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
     reduce(Y, G.Yproj, G.μY,  G.σY)
 end
 
 
-function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T})
+function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
     recover(Z, G.Yproj, G.μY,  G.σY)
 end
 
