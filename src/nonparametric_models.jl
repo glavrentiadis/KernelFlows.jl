@@ -33,16 +33,14 @@ include("nonparametric_predict.jl")
 function NonParametricMVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                                 Y_tr::Matrix{T},  # training outputs, data in rows
                                 kernel::Function, # same RBF kernel for all GPModels
-                                # DXs contains a DimRedStruct for each output dim,; a single DX gets replicated
-                                DXs::Union{DimRedStruct{T},Vector{DimRedStruct{T}}},
-                                DY::DimRedStruct{T};
+                                G::GPGeometry{T};
                                 segments::Int = 5, # number of segments to break the warping of test data to
                                 Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters for input dimensions
                                 Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters, θ in rows
                                 transform_zy::Bool = false) where T <: Real
 
-    B_orig = MVGPModel(X_tr, Y_tr, kernel, DXs, DY; Λ, Ψ, transform_zy)
-    B_warped = MVGPModel(X_tr, Y_tr, kernel, DXs, DY; Λ, Ψ, transform_zy)
+    B_orig = MVGPModel(X_tr, Y_tr, kernel, G; Λ, Ψ, transform_zy)
+    B_warped = MVGPModel(X_tr, Y_tr, kernel, G; Λ, Ψ, transform_zy)
 
     nGPs = length(B_orig.Ms)
     warpings = Vector{Vector{MVGPModel{T}}}(undef, nGPs)

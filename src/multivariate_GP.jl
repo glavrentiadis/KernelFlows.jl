@@ -20,7 +20,7 @@ export MVGPModel, update_MVGPModel!, trim_MVGP_data
 """Multivariate GP for multivariate input - multivariate output relations"""
 struct MVGPModel{T}
     Ms::Vector{GPModel{T}} # vector of GPModels
-    DY::DimRedStruct{T}     # DimRedStruct for outputs
+    G::GPGeometry{T}       # dimension reduction/augmentation spec
 end
 
 
@@ -38,7 +38,7 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
     Threads.@threads  for (i,M) ∈ collect(enumerate(MVM.Ms))
-        update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear = G.Xprojs[i].spec.nXCCA)
     end
 
     MVM
@@ -48,8 +48,7 @@ end
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
                    kernel::Function, # same RBF kernel for all GPModels
-                   DXs::Vector{DimRedStruct{T}}, # DX for each output dim
-                   DY::DimRedStruct{T};
+                   G::GPGeometry{T}; # input-output mapping geometry
                    Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters for input dimensions
                    Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters, θ in rows
 
@@ -59,37 +58,23 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
     buf1 = zeros(ntr, ntr)
     buf2 = zeros(ntr, ntr)
 
-    ZY_tr = original_to_reduced(Y_tr, DY)
+    ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
-    @assert (length(DXs) == nZYdims) "DXs length and nZYdims do not match!"
-    nXdims = length(DXs[1].F.values)
+
     λs = (Λ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Λ))
     θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Ψ))
 
-    Ms = [GPModel(X_tr, ZY_tr[:,i], kernel, DXs[i];
+    Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernel;
                   λ = λs[i], θ = θs[i], transform_zy) for i ∈ 1:nZYdims]
 
-    return MVGPModel(Ms, DY)
-end
-
-
-"""Version of MVGPModel where the same DX is used for all output
-dimensions"""
-function MVGPModel(X_tr::Matrix{T}, Y_tr::Matrix{T}, kernel::Function,
-                   DX::DimRedStruct{T}, DY::DimRedStruct{T};
-                   Λ::Union{Nothing, Matrix{T}} = nothing,
-                   Ψ::Union{Nothing, Matrix{T}} = nothing,
-                   transform_zy::Bool = true) where T <: Real
-
-    DXs = [DX for _ ∈ DY.F.values]
-    MVGPModel(X_tr, Y_tr, kernel, DXs, DY; Λ, Ψ, transform_zy)
+    return MVGPModel(Ms, G)
 end
 
 
 """From MVGP take only observations described by index vector s. Returns an entirely new MVGP object."""
 function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Real
     ntr = length(s)
-    Ms = [GPModel(M.ζ[s], zeros(ntr), M.Z[s,:], M.DX, M.λ[:], M.θ[:],
+    Ms = [GPModel(M.ζ[s], zeros(ntr), M.Z[s,:], M.λ[:], M.θ[:],
                   M.kernel, M.zytransf, M.zyinvtransf) for M ∈ MVM.Ms]
     MVM_new = MVGPModel(Ms, MVM.DY)
     update_MVGPModel!(MVM_new)

@@ -44,21 +44,21 @@ end
 
 
 
-function matrixplot_preds(X_te::AbstractMatrix{T}, DXs::Vector{DimRedStruct{T}},
+function matrixplot_preds(X_te::AbstractMatrix{T}, G::GPGeometry{T},
                           ZY_te::AbstractMatrix{T}, ZY_te_pred::AbstractMatrix{T};
                           diff = false, origspace = false) where T <: Real
 
 
     npcs = size(ZY_te_pred)[2]
 
-    npars = [size(DX.F.vectors)[2] for DX in DXs]
-    npars = origspace ? [size(X_te)[2] for _ in DXs] : npars
+    npars = [size(Xproj.vectors)[2] for Xproj in G.Xprojs]
+    npars = origspace ? [size(X_te)[2] for _ in G.Xprojs] : npars
     npars_max = maximum(npars)
 
     p = plot(layout = (npcs,npars_max), size = (3000,1500), top_margin = -6mm)
 
     for i ∈ 1:npcs
-        ZX_te = origspace ? X_te : original_to_reduced(X_te, DXs[i])
+        ZX_te = origspace ? X_te : reduce_X(X_te, G, i)
         for j ∈ 1:npars[i]
             println(j)
             pl!(p[i,j], ZX_te[:,j], ZY_te[:,i], ZY_te_pred[:,i]; diff)
@@ -86,15 +86,6 @@ function matrixplot_preds(X_te::AbstractMatrix{T}, DXs::Vector{DimRedStruct{T}},
     # savefig("matrixplot.pdf")
     p
 end
-
-"""DX here is just a single DimRedStruct for X, as opposed to a vector"""
-function matrixplot_preds(X_te::Matrix{T}, DX::DimRedStruct{T},
-                          ZY_te::Matrix{T}, ZY_te_pred::Matrix{T};
-                          diff = false, origspace = false) where T <: Real
-    DXs = [DX for i ∈ 1:size(ZY_te_pred)[2]]
-    matrixplot_preds(X_te, DXs, ZY_te, ZY_te_pred; diff, origspace)
-end
-
 
 function matrixplot_predictions(X_te, ZY_te, ZY_te_pred, fname, Yvarname, lossname; diff = false, npcs = size(ZY_te_pred)[2], npars = size(X_te)[2], fsize = (2000,2000), parnames = 1:size(X_te)[2])
 
@@ -134,10 +125,10 @@ function matrixplot_predictions(X_te, ZY_te, ZY_te_pred, fname, Yvarname, lossna
     savefig("matrixplot_predictions_" * fname * ".pdf")
 end
 
-function plot_error_contribs(ZY_te, ZY_te_pred, DY, title)
+function plot_error_contribs(ZY_te, ZY_te_pred, G, title)
     npcs = size(ZY_te_pred)[2]
     p = plot()
-    data = (sum((abs.(ZY_te_pred - ZY_te[:,1:npcs])), dims = 1) .* sqrt.(DY.F.values[1:npcs]'))[:]
+    data = (sum((abs.(ZY_te_pred - ZY_te[:,1:npcs])), dims = 1) .* G.Yproj.values[1:npcs]')[:]
     data ./= sum(data)
     scatter!(p, data, label = "Errors")
 

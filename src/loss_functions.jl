@@ -23,9 +23,9 @@ using Distances
 using StatsBase
 
 """Version of ρ, where Nc = 1 and we average over all possible Xc."""
-function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector) where T
+function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1) where T
     n = length(yₛ)
-    Ω = kernel_matrix(Xₛ, k, logθ)
+    Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
     # For the numerator, go over all combinations of size 1 for all
     # samples in Xₛ and average. Reduces to:
@@ -35,17 +35,17 @@ function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Functi
 end
 
 
- function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}) where T
-     Ω = kernel_matrix(Xₛ, k, logθ)
+ function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+     Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
      return (yₛ' * inv(Symmetric(Ω)) * yₛ)[1]
 end
 
 
 """Maximum likelihood."""
-function ρ_MLE(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::Vector{T}) where T
+function ρ_MLE(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
     n = length(yₛ)
-    Ω = kernel_matrix(Xₛ, k, logθ)
+    Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
     # Whichever is faster; should be same result
     L = cholesky(Ω).U
@@ -69,8 +69,8 @@ end
 
 
 """Original version, converges slower but also works"""
-function ρ_KF(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}) where T
-    Ω = kernel_matrix(Xf, k, logθ)
+function ρ_KF(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+    Ω = kernel_matrix(Xf, k, logθ; nXlinear)
     Nc = size(Ω)[1] ÷ 2
     yc = @view yf[1:Nc]
     Ωc = Symmetric(Ω[1:Nc, 1:Nc])
@@ -80,8 +80,8 @@ end
 
 
 """Original version, with complement subbatching, slightly improves on original."""
-function ρ_complement(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}) where T
-    Ω = kernel_matrix(Xf, k, logθ)
+function ρ_complement(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+    Ω = kernel_matrix(Xf, k, logθ; nXlinear)
 
     nchunks = 2
     sr = KFCommon.splitrange(1, length(yf), nchunks + 1)
@@ -102,8 +102,8 @@ end
 
 
 """Leave one out cross validation"""
-function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}) where T
-    Ω = kernel_matrix(X, k, logθ)
+function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}; nXlinear = 1) where T
+    Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     N = length(y)
     M = N * Ω⁻¹
@@ -117,11 +117,11 @@ end
 
 
 # Minimize cross-validated RMSE directly (L2 loss).
-function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = false) where T
+function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = false, nXlinear = 1) where T
     # If predictonlycenter == true, predicts only a few center points,
     # around which training data has been sampled. Make sure that
     # minibatch_method in Parametric.jl is set to "neighborhood".
-    Ω = kernel_matrix(X, k, logθ)
+    Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     N = length(y)
     # Predict this many points closest to the center, or everything
@@ -138,8 +138,8 @@ end
 
 
 """Same function as ρ_RMSE, but absolute error instead of squared"""
-function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector, predictonlycenter::Bool = false) where T
-    Ω = kernel_matrix(X, k, logθ)
+function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector, predictonlycenter::Bool = false, nXlinear = 1) where T
+    Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     N = length(y)
     M = predictonlycenter ? 3 : N
@@ -154,47 +154,47 @@ function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, lo
 end
 
 
-function ρ_RMSE_localized(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::Vector{T}, predictonlycenter::Bool = false) where T
-    # If predictonlycenter == true, predicts only the center point,
-    # around which training data has been sampled. Make sure that
-    # minibatch_method in Parametric.jl is set to "neighborhood".
+# function ρ_RMSE_localized(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::Vector{T}, predictonlycenter::Bool = false) where T
+#     # If predictonlycenter == true, predicts only the center point,
+#     # around which training data has been sampled. Make sure that
+#     # minibatch_method in Parametric.jl is set to "neighborhood".
 
-    D = @views k.(sum((X .- X[1,:]').^2, dims = 2); logθ = logθ)[:]
-    m2 = D .> 1e-9
-    nfeas = sum(m2) # number of feasible observations
+#     D = @views k.(sum((X .- X[1,:]').^2, dims = 2); logθ = logθ)[:]
+#     m2 = D .> 1e-9
+#     nfeas = sum(m2) # number of feasible observations
 
-    # sample max ncloseobs points using covariances as weights.
-    ncloseobs = 64
-    if nfeas > ncloseobs
-        m4 = sortperm(D[m2])
-        b = cumsum(D[m2][m4])
-        m3 = m4[unique([searchsortedfirst(b, rand()*b[end]) for _ ∈ 1:ncloseobs])]
-    else
-        m3 = 1:nfeas
-    end
+#     # sample max ncloseobs points using covariances as weights.
+#     ncloseobs = 64
+#     if nfeas > ncloseobs
+#         m4 = sortperm(D[m2])
+#         b = cumsum(D[m2][m4])
+#         m3 = m4[unique([searchsortedfirst(b, rand()*b[end]) for _ ∈ 1:ncloseobs])]
+#     else
+#         m3 = 1:nfeas
+#     end
 
-    Ω = @views kernel_matrix(X[m2,:][m3,:], k, logθ)
-    Ω⁻¹ = inv(Ω)
+#     Ω = @views kernel_matrix(X[m2,:][m3,:], k, logθ)
+#     Ω⁻¹ = inv(Ω)
 
-    y2 = y[m2][m3]
-    N = length(y2)
-    M = predictonlycenter ? min(1, N) : N
-    tot = 0.0
+#     y2 = y[m2][m3]
+#     N = length(y2)
+#     M = predictonlycenter ? min(1, N) : N
+#     tot = 0.0
 
-    if N == 0 # Not sure why in rare cases X's are NaN's and then this all fails
-        println("Zero obs found in localization radius, N = $N and logθ = $logθ")
-        println("returning $(y[1]^2)")
-        return y[1]^2
-    end
+#     if N == 0 # Not sure why in rare cases X's are NaN's and then this all fails
+#         println("Zero obs found in localization radius, N = $N and logθ = $logθ")
+#         println("returning $(y[1]^2)")
+#         return y[1]^2
+#     end
 
-    # Compute the RMSE
-    for i ∈ 1:M
-        m = [1:i-1; i+1:N]
-        tot +=  @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y2[m] - y2[i])^2
-    end
+#     # Compute the RMSE
+#     for i ∈ 1:M
+#         m = [1:i-1; i+1:N]
+#         tot +=  @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y2[m] - y2[i])^2
+#     end
 
-    return tot / M
-end
+#     return tot / M
+# end
 
 
 # # Does not produce the right results for some reason
@@ -214,5 +214,3 @@ end
 #     return sqrt(tot / length(y))
 
 # end
-
-

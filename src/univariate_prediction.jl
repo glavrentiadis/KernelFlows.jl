@@ -19,21 +19,20 @@ export predict
 
 using Distances
 
-"""GP prediction with Model (univariate output). By default both DX,
-   and M.λ have already been applied, namely,
+"""GP prediction with Model (univariate output). By default M.λ will
+be applied, namely,
 
-   X = M.λ' * original_to_reduced(X, M.DX)
+   X = M.λ' * X
 
-   This can be overruled by setting apply_DX and/or apply_λ to true.
+This can be overruled by setting apply_λ to false. Note that in this
+function X needs to be given in reduced coordinates.
 """
 function predict(M::GPModel{T}, X::AbstractMatrix{T};
-                 apply_DX::Bool = true,
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 buf::Union{Nothing, Matrix{T}} = nothing) where T <: Real
+                 buf::Union{Nothing, Matrix{T}} = nothing,
+                 nXlinear::Int = 1) where T <: Real
 
-    # Transform test inputs with DX if requested
-    apply_DX && (X = original_to_reduced(X, M.DX))
     apply_λ && (X .*= M.λ')
 
     # Allocate buffer if not given
@@ -41,7 +40,8 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
 
     s = Euclidean()
     pairwise!((a,b) -> M.kernel(s(a,b); M.θ), buf, eachrow(X), eachrow(M.Z))
-    buf += @views M.θ[end - 1] * X[:,1] * M.Z[:,1]'
+
+    buf += @views M.θ[end - 1] * X[:,1:nXlinear] * M.Z[:,1:nXlinear]'
 
     ret = apply_zyinvtransf ? M.zyinvtransf.(buf * M.h) : buf * M.h
 end

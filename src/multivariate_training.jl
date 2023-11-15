@@ -22,7 +22,8 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
                 T <: Real
 
     Threads.@threads for k ∈ ζcomps
-        train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg, quiet)
+        nXlinear = MVM.G.Xprojs[k].spec.nCCA
+        train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg, quiet, nXlinear)
     end
 
     MVM

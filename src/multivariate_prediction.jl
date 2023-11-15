@@ -15,17 +15,20 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
-                 apply_DX::Bool = true,
+                 reduce_X::Bool = true,
                  apply_λ::Bool = true,
-                 apply_DY::Bool = true,
-                 apply_zyinvtransf::Bool = true) where T <: Real
+                 recover_Y::Bool = true,
+                 apply_zyinvtransf::Bool = true,
+                 Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
 
     nte = size(X)[1]
     nzycols = length(MVM.Ms)
     ZY_pred = zeros(nte, nzycols)
-    Threads.@threads for (i,M) ∈ collect(enumerate(MVM.Ms))
-        ZY_pred[:,i] .= predict(MVM.Ms[i], X; apply_DX, apply_λ, apply_zyinvtransf)
+    Threads.@threads for i ∈ Mlist
+        Z = reduce_X ? reduce_X(X, G, i) : X
+        nXlinear = MVM.G.Xprojs[i].spec.nCCA
+        ZY_pred[:,i] .= predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf, nXlinear)
     end
 
-    return apply_DY ? reduced_to_original(ZY_pred, MVM.DY) : ZY_pred
+    return recover_Y ? recover_Y(ZY_pred, MVM.G) : ZY_pred
 end

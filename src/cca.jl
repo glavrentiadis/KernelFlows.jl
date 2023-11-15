@@ -15,6 +15,9 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
+using Arpack
+
+
 """Carries out CCA for input-output pair X,Y"""
 function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs = 50) where T <: Real
 

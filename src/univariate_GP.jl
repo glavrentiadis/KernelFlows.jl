@@ -23,13 +23,13 @@ combined to construct the original y."""
 struct GPModel{T}
     ζ::Vector{T}        # ζ = zytransf.(zy_tr), needed for updating h
     h::Vector{T}        # K⁻¹ ζ, where K is the kernel matrix
-    Z::Matrix{T}        # transformed X_tr *after* applying scaling
-    DX::DimRedStruct{T} # X dimension reduction
+    Z::Matrix{T}        # transformed X_tr *after* applying λ-scaling
     λ::Vector{T}        # X_tr scaling factors for each input dimension
     θ::Vector{T}        # kernel parameters for spherical + linear kernel
     kernel::Function    # kernel function
     zytransf::Function    # nonlinear 1-d output transformations
     zyinvtransf::Function # inverse 1-d output transformations
+    ρ_values::Vector{T} # loss function values from latest training
 end
 
 
@@ -38,11 +38,11 @@ include("univariate_training.jl")
 include("univariate_prediction.jl")
 
 
-function GPModel(X_tr::Matrix{T}, zy_tr::Vector{T},
-                 kernel::Function, DX::DimRedStruct{T};
+function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
+                 zy_tr::Vector{T}, # outputs after reduce()
+                 kernel::Function;
                  λ::Union{Nothing, Vector{T}} = nothing,
                  θ::Union{Nothing, Vector{T}} = nothing,
-                 skip_DX_transf::Bool = false, # use if X_tr is actually ZX_tr
                  transform_zy::Bool = false) where T <: Real
 
     # Gaussianize 1-d labels if requested
@@ -50,8 +50,6 @@ function GPModel(X_tr::Matrix{T}, zy_tr::Vector{T},
     transform_zy && ((zytransf, zyinvtransf) = gaussianize_transforms(zy_tr))
     ζ = zytransf.(zy_tr)
 
-    # Transform X_tr if requested
-    ZX_tr = skip_DX_transf ? X_tr : original_to_reduced(X_tr, DX)
     ntr, nZXdims = size(ZX_tr)
 
     h = zeros(ntr)
@@ -61,7 +59,7 @@ function GPModel(X_tr::Matrix{T}, zy_tr::Vector{T},
     @assert length(λ) == nZXdims "Invalid λ length"
     @assert length(θ) == 4 "Invalid θ length"
 
-    return GPModel(ζ, h, ZX_tr, DX, λ, θ, kernel, zytransf, zyinvtransf)
+    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, zeros(10000))
 end
 
 
@@ -73,7 +71,8 @@ function update_GPModel!(M::GPModel{T};
                          newλ::Union{Nothing, Vector{T}} = nothing,
                          newθ::Union{Nothing, Vector{T}} = nothing,
                          buf1::Union{Nothing, Matrix{T}} = nothing,
-                         buf2::Union{Nothing, Matrix{T}} = nothing) where T <: Real
+                         buf2::Union{Nothing, Matrix{T}} = nothing,
+                         nXlinear::Int = 1) where T <: Real
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
@@ -91,7 +90,8 @@ function update_GPModel!(M::GPModel{T};
     (buf1 == nothing) && (buf1 = zeros(ntr, ntr))
     (buf2 == nothing) && (buf2 = zeros(ntr, ntr))
 
-    KI = kernel_matrix_fast(M.Z, buf1, buf2, M.kernel, M.θ; precision = true)
+    KI = kernel_matrix_fast(M.Z, buf1, buf2, M.kernel, M.θ;
+                            precision = true, nXlinear)
     mul!(M.h, KI, M.ζ)
 
     M

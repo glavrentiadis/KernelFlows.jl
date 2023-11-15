@@ -14,6 +14,8 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+export dimreduce, reduce, reduce_X, reduce_Y, recover, recover_Y
+
 
 struct ProjectionSpec
     nCCA::Int # number of CCA vecs
@@ -107,7 +109,8 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
 
         # Compute projections and remove yvec direction from Y
         Y, vYprojs = remove_direction(Y, yvec)
-        
+
+        # Save relevant quantities
         Xprojs[i].vectors[:,1] = FX.vectors[:,1]
         Yproj.vectors[:,i] = yvec
         Xprojs[i].values[1] = FX.values[1]
@@ -126,7 +129,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
         Yproj.values .= 1.0 # Data was standardized earlier
         Yproj.vectors .= diagm(ones(nYdummy))
     end
-    
+
     # Fill the rest of CCA X-dimensions and dummy X dimensions for all Y-vectors
     for i in 1:nY
         yproj_i = Y * Yproj.vectors[:,i]
@@ -215,6 +218,23 @@ function recover(Z::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vect
 end
 
 
+function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int)
+    reduce(X, G.Xprojs[i], G.μX,  G.σX)
+end
+
+
+function reduce_Y(Y::AbstractMatrix{T}, G::GPGeometry{T})
+    reduce(Y, G.Yproj, G.μY,  G.σY)
+end
+
+
+function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T})
+    recover(Z, G.Yproj, G.μY,  G.σY)
+end
+
+
+
+
 # Not yet adapted to new dimension reduction code
 # function reduced_unc_to_original(z::AbstractVector{T}, D::DimRedStruct{T};
 #                                  npcs = length(z)) where T <: Real
@@ -222,4 +242,3 @@ end
 #     G = @view D.F.vectors[:, 1:npcs]
 #     G * Diagonal((D.F.values[1:npcs]) .* z[1:npcs]) * G'
 # end
-

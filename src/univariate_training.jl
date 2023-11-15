@@ -14,38 +14,42 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-struct FlowResP{T}
+struct FlowRes{T}
     s_values::Vector{Vector{Int}} # indexes of the minibatch in X_full
     ρ_values::Vector{T} # loss function values
     α_values::Vector{Vector{T}} # scaling and kernel parameters and nugget
 end
 
 
-function best_α_from_FR(FR::FlowResP{T};
+function best_α_from_flowres(flowres::FlowRes{T};
                         navg::Union{Int, Nothing} = nothing,
                         quiet::Bool = false) where T <: Real
 
-    navg == nothing && return FR.α_values[end]
+    navg == nothing && return flowres.α_values[end]
 
-    bestidx = argmin(runningmedian(FR.ρ_values, navg))
+    bestidx = argmin(runningmedian(flowres.ρ_values, navg))
     println("Selecting best index $bestidx")
-    FR.α_values[bestidx]
+    flowres.α_values[bestidx]
 end
 
 
 function train!(M::GPModel{T}, ρ::Function;
                 ϵ::T = .05, niter::Int = 500, n::Int = 48, ngridrounds::Int = 6,
-                navg::Union{Nothing, Int} = nothing,
+                navg::Union{Nothing, Int} = nothing, nXlinear::Int = 1,
                 quiet::Bool = false) where T <: Real
 
     α₀ = vcat(M.λ, M.θ)
     nλ = length(M.λ)
 
     Z = M.Z ./ M.λ'
-    FR = flow(Z, M.ζ, ρ, M.kernel, α₀; ϵ, niter, n, ngridrounds, quiet)
-    α = best_α_from_FR(FR; navg, quiet)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, α₀;
+                   ϵ, niter, n, ngridrounds, nXlinear, quiet)
+    α = best_α_from_flowres(flowres; navg, quiet)
 
-    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end])
+    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear)
+    m = min(length(M.ρ_values), length(flowres.ρ_values))
+    M.ρ_values[1:m] .= flowres.ρ_values[1:m]
+    M
 end
 
 
@@ -54,7 +58,7 @@ GPModel; that way it is more generally usable."""
 function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
               kernel::Function, α₀::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
-              ngridrounds::Int = 6, ϵ = 5e-2,
+              ngridrounds::Int = 6, ϵ = 5e-2, nXlinear::Int = 1,
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235)
@@ -68,8 +72,8 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     reg = 1e-6
 
-    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]) +
-        reg * sum(exp.(logα))
+    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]; nXlinear) +
+        reg * sum(exp.(logα[1:nXdims]))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
 
     all_s = get_random_partitions(ndata, n, niter)
@@ -98,7 +102,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     logα = test_logα # rename this now that we have a starting point guess
     quiet || println("Starting point for kernel parameters: $logα")
 
-    FR = FlowResP(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
+    flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
     m = 50 # number of past gradients to average over
     avg = zeros(length(logα), m)
@@ -112,8 +116,8 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
         # (i % 100 == 0) && display(logα')
         s = all_s[i]
 
-        push!(FR.α_values, exp.(logα))
-        FR.ρ_values[i] = @views ξ(X[s,:], ζ[s], logα)[1]
+        push!(flowres.α_values, exp.(logα))
+        flowres.ρ_values[i] = @views ξ(X[s,:], ζ[s], logα)[1]
         grad .= @views ∇ξ(X[s,:], ζ[s], logα)[1]
         g .= grad == nothing ? zero(logα) : grad
 
@@ -132,5 +136,5 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     quiet || println("Final kernel parameters: $logα")
 
-    FR
+    flowres
 end

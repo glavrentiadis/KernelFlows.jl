@@ -28,15 +28,15 @@ RMSE(Y_true, Y_pred) = sqrt(sum((Y_true - Y_pred).^2)/size(Y_pred)[1])
 
 
 """Compute kernel matrix K, or if precision == true, its inverse."""
-function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::AbstractMatrix{T}, k::Function, θ::AbstractVector{T}; precision = true) where T <: Real
+function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::AbstractMatrix{T}, k::Function, θ::AbstractVector{T}; precision = true, nXlinear::Int = 1) where T <: Real
     s = Euclidean()
 
     pairwise!((a,b) -> k(s(a,b); θ = θ[end-3:end-2]), buf1, eachrow(X), eachrow(X), symmetric = true)
     buf1[diagind(buf1)] .+= max(exp(-15.), θ[end])
     lf = θ[end-1] # linear kernel component weight
 
-    # Linear component only sees first dimension of X
-    XXt = X[:,1] * X[:,1]'
+    # Linear component only sees first nXlinear dimensions of X
+    XXt = X[:,1:nXlinear] * X[:,1:nXlinear]'
 
     # Linear component with full input array X; for swapping you'll
     # also need to change GP_predict()
@@ -62,13 +62,13 @@ end
 
 """Compute kernel matrix; no inversion. This function is
    autodifferentiable with Zygote."""
-function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector) where T <: Real
+function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector; nXlinear::Int = 1) where T <: Real
     # Notice that regularization apparently does not affect the flow;
     # however, when predicting it does affect the RMSE very much in Predict.jl.
     # N.B. You could also to regularization ala KRR w/ delta × RKHS
 
     # Linear component only for first X dimension
-    KK = (X[:,1] * X[:,1]')
+    KK = (X[:,1:nXlinear] * X[:,1:nXlinear]')
     H1 = pairwise_Euclidean(X)
     H2 = k.(H1; θ = exp.(logθ[1:end-2])) +
       Diagonal(exp(max(logθ[end], -15.)) * ones(size(X)[1])) + exp(logθ[end-1]) * KK

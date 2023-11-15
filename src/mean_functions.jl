@@ -39,7 +39,7 @@ X should work reasonably well, or then scaled and centered inputs from
 dimreduce_basic().  """
 
 function polycorrect_mf(ZX::Matrix{T}, ZY::Matrix{T}, ZY_pred::Matrix{T},
-                        DY::DimRedStruct, dims::AbstractVector{Int};
+                        G::GPGeometry{T}, dims::AbstractVector{Int};
                         npts::Int = 100, deg::Int = 10) where T <: Real
 
     # Take points from ZX in as space-filling fashion as
@@ -58,7 +58,7 @@ function polycorrect_mf(ZX::Matrix{T}, ZY::Matrix{T}, ZY_pred::Matrix{T},
     end
 
     # Compute corrected Y transformed back into original coordinates
-    Y_pred_corr = reduced_to_original(ZY_pred_corr, DY; nvecs = size(ZY)[2])
+    Y_pred_corr = recover_Y(ZY_pred_corr, G)
 
     return polys, Y_pred_corr, ZY_pred_corr, idx, idxC
 end
