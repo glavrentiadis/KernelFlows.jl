@@ -27,7 +27,7 @@ function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
                             s_tr::Union{Nothing, AbstractVector{Int}} = nothing,
                             s_te::Union{Nothing, AbstractVector{Int}} = nothing,
                             kernel::Function = MVM.Ms[1].kernel,
-                            nvecs::Int = length(MVM.Yproj.values)) where T <: Real
+                            dimreduceargs::NamedTuple = (nYCCA = 1, nYPCA = 1, nXCCA = 1)) where T <: Real
 
     # Divide data as given by s_tr or in half
     ntr = size(MVM.Ms[1].Z)[1]
@@ -43,7 +43,7 @@ function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
     augment_X_with_Y_residuals = false
     X_tr_new = augment_X_with_Y_residuals ? hcat(Y_tr_ste_pred, X_tr_ste) : X_tr_ste
     # New dimension reduction for residual model
-    G = dimreduce(X_tr_new, Ydiff_tr_ste; nYCCA = 1, nYPCA = nvecs - 1, nXCCA = 1)
+    G = dimreduce(X_tr_new, Ydiff_tr_ste; dimreduceargs...)
     
     # Return second level model
     MVM2 = MVGPModel(X_tr_new, Ydiff_tr_ste, kernel, G; transform_zy = false)

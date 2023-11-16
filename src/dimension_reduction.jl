@@ -60,7 +60,8 @@ julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::AbstractVector{Int} = 1:size(X)[2],
-                   reg_CCA::T = 1e-2, maxdata::Int = 3000) where T <: Real
+                   reg_CCA::T = 1e-2, maxdata::Int = 3000,
+                   scale_Y::Bool = true) where T <: Real
 
     # Do not use more CCA / PCA dims than there are dimensions
     nYCCA = min(nYCCA, size(Y)[2], size(X)[2])
@@ -86,7 +87,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     μX = mean(X, dims = 1)[:]
     μY = mean(Y, dims = 1)[:]
     σX = std(X, dims = 1)[:]
-    σY = std(Y, dims = 1)[:]
+    σY = scale_Y ? std(Y, dims = 1)[:] : ones(size(Y)[2])
 
     X .= (X .- μX') ./ σX'
     Y .= (Y .- μY') ./ σY'

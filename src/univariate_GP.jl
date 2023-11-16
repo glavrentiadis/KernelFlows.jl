@@ -76,6 +76,8 @@ function update_GPModel!(M::GPModel{T};
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
+        newλ[newλ .< -20.] .= -20.
+        newλ[newλ .> 20.] .= 20.
         l = newλ ./ M.λ
         M.Z .*= l'
         M.λ .= newλ
