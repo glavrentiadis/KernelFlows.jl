@@ -27,7 +27,8 @@ function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
                             s_tr::Union{Nothing, AbstractVector{Int}} = nothing,
                             s_te::Union{Nothing, AbstractVector{Int}} = nothing,
                             kernel::Function = MVM.Ms[1].kernel,
-                            dimreduceargs::NamedTuple = (nYCCA = 1, nYPCA = 1, nXCCA = 1)) where T <: Real
+                            dimreduceargs::NamedTuple = (nYCCA = 1, nYPCA = 1, nXCCA = 1),
+                            transform_zy = false) where T <: Real
 
     # Divide data as given by s_tr or in half
     ntr = size(MVM.Ms[1].Z)[1]
@@ -46,5 +47,5 @@ function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
     G = dimreduce(X_tr_new, Ydiff_tr_ste; dimreduceargs...)
     
     # Return second level model
-    MVM2 = MVGPModel(X_tr_new, Ydiff_tr_ste, kernel, G; transform_zy = false)
+    MVM2 = MVGPModel(X_tr_new, Ydiff_tr_ste, kernel, G; transform_zy)
 end
