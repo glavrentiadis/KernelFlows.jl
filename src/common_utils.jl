@@ -124,14 +124,19 @@ function renormalize_columns(V::AbstractMatrix{T}; q::T = 1., new_scale::T = 0.)
 end
 
 
-function rebalance_data(ZX_tr, nleave, kernel, logλ; nolinear = true)
-    npars = size(ZX_tr)[2]
-    logθ = logλ[npars+1:end]
-    nolinear && (logθ[end - 1] = -100.)
-    pw = abs.(LossFunctions.kernel_matrix(ZX_tr .* logλ[1:npars]', kernel, logθ))
+function rebalance_data(X::AbstractMatrix{T}, nleave::Int, MVM::MVGPModel{T};
+                        ydims::AbstractVector{Int} = 1:length(MVM.Ms),
+                        nXlinear::Union{Int, Nothing} = nothing) where T <: Real
+    ndata = size(X)[1]
+    pw = zeros(ndata, ndata)
+    for ydim in ydims
+        nXlinear == nothing ? MVM.G.Xprojs[ydim].spec.nCCA : nXlinear
+        Z = reduce_X(X, MVM.G, ydim)
+        pw .+= MVM.G.Yproj.values[ydim] * abs.(kernel_matrix(Z, MVM.Ms[ydim].kernel, log.(MVM.Ms[ydim].θ), nXlinear = 0))
+    end
 
     v = sum(pw, dims = 2)[:]
-    ndata = size(ZX_tr)[1]
+    ndata = size(X)[1]
     drop = zeros(Int, ndata - nleave)
     for i ∈ 1:ndata - nleave
         l = argmax(v)
@@ -140,6 +145,7 @@ function rebalance_data(ZX_tr, nleave, kernel, logλ; nolinear = true)
         drop[i] = l
     end
 
+    # Return the optimized trimmed training data
     return setdiff(1:ndata, drop)
 end
 
@@ -151,23 +157,6 @@ function rebalance_next()
 
 end
 
-
-# function rebalance_data(X, nleave; k = d -> exp(-d'*d), buf_rebalance = nothing)
-#     pw = exp.(-100*pairwise(SqEuclidean(), X'))
-#     v = sum(pw, dims = 2)[:]
-#     ndata = size(X)[1]
-#     drop = zeros(Int, ndata - nleave)
-#     for i ∈ 1:ndata - nleave
-#         s = sortperm(v)
-#         l = s[end]
-#         v .-= pw[l,:]
-#         v[l] = -1
-#         pw[l,:] .= 0
-#         pw[:,l] .= 0
-#         drop[i] = l
-#     end
-#     return setdiff(1:ndata, drop)
-# end
 
 
 # THIS FUNCTION IS BROKEN, DOES NOT WORK AS EXPECTED DUE TO BUG
