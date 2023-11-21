@@ -62,23 +62,14 @@ end
 
 """Compute kernel matrix; no inversion. This function is
    autodifferentiable with Zygote."""
-function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector; nXlinear::Int = 1) where T <: Real
-    # Notice that regularization apparently does not affect the flow;
-    # however, when predicting it does affect the RMSE very much in Predict.jl.
-    # N.B. You could also to regularization ala KRR w/ delta × RKHS
+function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector;
+                       nXlinear::Int = 1) where T <: Real
 
     # Linear component only for first X dimension
-    KK = (X[:,1:nXlinear] * X[:,1:nXlinear]')
+    KK = @views X[:,1:nXlinear] * X[:,1:nXlinear]'
     H1 = pairwise_Euclidean(X)
     H2 = k.(H1; θ = exp.(logθ[1:end-2])) +
       Diagonal(exp(max(logθ[end], -15.)) * ones(size(X)[1])) + exp(logθ[end-1]) * KK
-
-    # Linear component for all dimensions. (prediction code assumes
-    # first component and similar comment swapping is needed in
-    # GP_predict to change behavior.)
-    # KK = X * X'
-    # H2 = k.(H1; θ = exp.(logθ[1:end-2])) +
-    # Diagonal(exp(max(logθ[end], -15.)) * ones(size(X)[1])) + exp(logθ[end-1]) * X * X'
 
     H2
 end
@@ -104,12 +95,12 @@ function deciles(y::Vector{T}) where T <: Real
 end
 
 
-"""Makes sure all training data are equally often sampled when not all
-data are always observed"""
-function get_random_partitions(N::Int, n::Int, niter::Int)
-    k = N ÷ n # shorthand
-    m = round(Int, (niter / k) + 1) # how many times partitioning N needs to be done
-    R = [randperm(N) for _ ∈ 1:m]
+"""Randomly split ndata data points into n subsets. This makes sure
+all training data are equally often sampled in SGD."""
+function get_random_partitions(ndata::Int, n::Int, niter::Int)
+    k = ndata ÷ n # shorthand
+    m = round(Int, (niter / k) + 1) # how many times data needs to be partitioned
+    R = [randperm(ndata) for _ ∈ 1:m]
     samples = [reshape(r[1:k*n], (k, n)) for r ∈ R]
     vcat(samples...)[1:niter,:]
 end
