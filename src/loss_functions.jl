@@ -137,6 +137,31 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, l
 end
 
 
+function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1) where T <: Real
+    Ω = kernel_matrix(X, k, logθ; nXlinear)
+    Ω⁻¹ = inv(Ω)
+    n = length(y)
+    L2tot = 0.0
+    vartot = 0.0
+
+    for i ∈ 1:n
+        m = [1:i-1; i+1:n]
+        A = @views Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m]
+        δ = @views A * y[m] - y[i]
+        σ = @views Ω[i,i] - A * Ω[m,i]
+        # println("δ: $δ, σ: $σ, z-score var: $(δ^2/σ)")
+        L2tot +=  δ^2
+        vartot += δ^2/σ
+    end
+    # println((vartot/(n-1) - 1.0)^2)
+
+    # The first term below is the average squared error, as in
+    # ρ_RMSE. The second one penalizes for any departure of the
+    # z-score sample variance from unity.
+    return L2tot / n + (vartot/(n-1) - 1.0)^2
+end
+
+
 """Same function as ρ_RMSE, but absolute error instead of squared"""
 function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector, predictonlycenter::Bool = false, nXlinear = 1) where T
     Ω = kernel_matrix(X, k, logθ; nXlinear)
