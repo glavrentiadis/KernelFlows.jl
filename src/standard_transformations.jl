@@ -19,7 +19,8 @@ export polyexpand, standard_transformations
 
 using StatsBase
 using Combinatorics
-
+using Distributions
+using BaryRational
 
 function polyexpand(X::AbstractMatrix{T}, degs::AbstractVector{Int}) where T <: Real
     ndata, ncols = size(X)
