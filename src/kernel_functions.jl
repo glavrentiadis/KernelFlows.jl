@@ -26,15 +26,15 @@ function spherical_sqexp(d::T; θ::AbstractVector) where T <: Real
 end
 
 function spherical_exp(d::T; θ::AbstractVector{T}) where T <: Real
-    return exp(logθ[1]) * exp(-d / exp(logθ[2]))
+    θ[1] * exp(-d / θ[2])
 end
 
 function Matern32(d::T; θ::AbstractVector{T}) where T <: Real
-    h = 3d / θ[2] # d is Euclidean distance
+    h = sqrt(3) * d / θ[2] # d is Euclidean distance
     θ[1] * (1. + h) * exp(-h)
 end
 
 function Matern52(d::T; θ::AbstractVector{T}) where T <: Real
-    h = 5d / θ[2]
+    h = sqrt(5) * d / θ[2]
     θ[1] * (1. + h + h^2 / 3) * exp(-h)
 end
