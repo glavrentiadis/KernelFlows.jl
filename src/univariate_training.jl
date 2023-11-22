@@ -47,6 +47,7 @@ function train!(M::GPModel{T}, ρ::Function;
     α = best_α_from_flowres(flowres; navg, quiet)
 
     update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear)
+    M.ρ_values .= 0
     m = min(length(M.ρ_values), length(flowres.ρ_values))
     M.ρ_values[1:m] .= flowres.ρ_values[1:m]
     M
