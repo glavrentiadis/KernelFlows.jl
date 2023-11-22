@@ -39,7 +39,6 @@ struct GPGeometry{T}
     σX::Vector{T} # input standard deviation
     μY::Vector{T} # output (Y) mean
     σY::Vector{T} # output standard deviation
-    YSpec::ProjectionSpec # Projection spec for Y-coordinates
     reg_CCA::T # CCA regular
 end
 
@@ -142,7 +141,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
         Xprojs[i].values[nXCCA+1:end] = dummyvals
     end
 
-    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, YSpec, reg_CCA)
+    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA)
 end
 
 

@@ -19,66 +19,131 @@
 using JLD2
 
 
-# """Function to load a GPModel object from file"""
-# function GPload(fname::String)
-# end
-
-
-# """Function to save a GPModel to a file"""
-# function GPsave(M::GPModel, fname::String)
-# end
-
-
-"""Function to save an MVGPModel to a file"""
-function GPsave(fname::String, MVM::MVGPModel)
-    jldopen(fname, "a+") do file
-        for (i,M) in enumerate(MVM.Ms)
-            G = JLD2.Group(file, "M" * string(i))
-            G["zeta"] = M.ζ
-            G["h"] = M.h
-            G["Z"] = M.Z
-            G["DXmu"] = M.DX.μ
-            G["DXF"] = M.DX.F
-            G["lambda"] = M.λ
-            G["theta"] = M.θ
-            G["kernel"] = string(M.kernel)
-        end
-
-        file["DYmu"] = MVM.DY.μ
-        file["DYF"] = MVM.DY.F
-    end
+"""Saves Projection as a group in a JLD2 file."""
+function save_Projection(P::Projection, G::JLD2.Group)
+    G["vectors"] = P.vectors
+    G["values"] = P.values
+    G["nCCA"] = P.spec.nCCA
+    G["nPCA"] = P.spec.nPCA
+    G["ndummy"] = P.spec.ndummy
+    G["dummydims"] = collect(P.spec.dummydims)
 end
 
 
-"""Function to load an MVGPModel object from file"""
-function GPload(fname::String)
+function load_Projection(G::JLD2.Group)
+    spec = ProjectionSpec(G["nCCA"], G["nPCA"], G["ndummy"], G["dummydims"])
+    Projection(G["vectors"], G["values"], spec)
+end
+
+
+"""Saves a GPModel as a group in a JLD2 file"""
+function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
+    G["zeta"] = M.ζ
+    G["h"] = M.h
+    G["Z"] = M.Z
+    G["lambda"] = M.λ
+    G["theta"] = M.θ
+    G["rho_values"] = M.ρ_values
+    G["kernel"] = string(M.kernel)
+end
+
+
+function load_GPModel(G::JLD2.Group)
 
     kerneltable = Dict("Matern32" => Matern32,
                        "Matern52" => Matern52,
                        "spherical_exp" => spherical_exp,
                        "spherical_sqexp" => spherical_sqexp)
 
-    # Make Ms and DY available outside do-loop scope
-    local Ms
-    local DY
+    ζ = G["zeta"]
+    h = G["h"]
+    Z = G["Z"]
+    λ = G["lambda"]
+    θ = G["theta"]
+    ρ_values = G["rho_values"]
+    kernel = kerneltable[G["kernel"]]
 
-    jldopen(fname, "r") do file
-        DY = DimRedStruct(file["DYmu"], file["DYF"])
-        Ms = Vector{GPModel{eltype(DY.μ)}}()
-        nM = length(keys(file)) - 2 # number of GPModels in MVGPModel
-        for i in 1:nM
-            G = file["M" * string(i)]
-            ζ = G["zeta"]
-            h = G["h"]
-            Z = G["Z"]
-            DX = DimRedStruct(G["DXmu"], G["DXF"])
-            λ = G["lambda"]
-            θ = G["theta"]
-            kernel = kerneltranslations[G["kernel"]]
-            push!(Ms, GPModel(ζ, h, Z, DX, λ, θ, kernel, identity, identity))
+    GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values)
+end
+
+
+function save_GPGeometry(geom::GPGeometry{T}, G::JLD2.Group) where T <: Real
+
+    for (i,Xp) in enumerate(geom.Xprojs)
+        g = JLD2.Group(G, "Xproj" * string(i))
+        save_Projection(Xp, g)
+    end
+
+    g = JLD2.Group(G, "Yproj")
+    save_Projection(geom.Yproj, g)
+
+    G["Xmean"] = geom.μX
+    G["Xstd"] = geom.σX
+    G["Ymean"] = geom.μY
+    G["Ystd"] = geom.σY
+    G["reg_CCA"] = geom.reg_CCA
+
+    G
+end
+
+
+function load_GPGeometry(G::JLD2.Group) where T <: Real
+
+    σX = G["Xstd"]
+    μX = G["Xmean"]
+    σY = G["Ystd"]
+    μY = G["Ymean"]
+    reg_CCA = G["reg_CCA"]
+    Yproj = load_Projection(G["Yproj"])
+    Xprojs = Vector{Projection{eltype(Yproj.values)}}()
+
+    for i in 1:length(Yproj.values)
+        push!(Xprojs, load_Projection(G["Xproj" * string(i)]))
+    end
+
+    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA)
+end
+
+
+"""Function to save an MVGPModel to a file or a new group in a file."""
+function save_MVGPModel(MVM::MVGPModel, fname::String; grpname::String = "")
+    jldopen(fname, "a+") do file
+        rootgrp = (grpname == "") ? file.root_group : JLD2.Group(file, grpname)
+        for (i,M) in enumerate(MVM.Ms)
+            (M.zytransf != identity) &&
+                (println("WARNING! zytransf are not saved correctly for now!"))
+            G = JLD2.Group(rootgrp, "M" * string(i))
+            save_GPModel(M, G)
         end
 
+        G = JLD2.Group(rootgrp, "G")
+        save_GPGeometry(MVM.G, G)
     end
-    MVGPModel(Ms, DY)
+end
 
+
+"""Function to load an MVGPModel object from file"""
+function load_MVGPModel(fname::String)
+
+    local MVM
+
+    jldopen(fname, "r") do file
+        MVM = load_MVGPModel(file.root_group)
+    end
+
+    MVM
+end
+
+
+function load_MVGPModel(G::JLD2.Group)
+
+    geom = load_GPGeometry(G["G"])
+    Ms = Vector{GPModel{eltype(geom.μX)}}()
+    nM = length(keys(G)) - 1 # number of GPModels in MVGPModel
+
+    for i in 1:nM
+        push!(Ms, load_GPModel(G["M" * string(i)]))
+    end
+
+    MVGPModel(Ms, geom)
 end
