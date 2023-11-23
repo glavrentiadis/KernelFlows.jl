@@ -22,6 +22,16 @@ using Combinatorics
 using Distributions
 using BaryRational
 
+
+struct TransfSpec{T}
+    μ::Vector{T}
+    σ::Vector{T}
+    minim::Vector{T}
+    ϵ::T
+    deg::Int
+end
+
+
 function polyexpand(X::AbstractMatrix{T}, degs::AbstractVector{Int}) where T <: Real
     ndata, ncols = size(X)
     all_combs = vcat([collect(with_replacement_combinations(1:ncols, d)) for d in degs]...)
@@ -41,37 +51,46 @@ function polyexpand(X::AbstractMatrix{T}, degs::AbstractVector{Int}) where T <: 
     return X_new
 end
 
+
 function polyexpand(X::AbstractMatrix{T}, deg::Int) where T <: Real
     polyexpand(X, 1:deg)
 end
 
-function posscale(X::AbstractMatrix{T}; ϵ = 1e-3) where T <: Real
-    Z = 5 .*X ./ std(X, dims = 1)
-    Z .-= minimum(Z, dims = 1) .- ϵ
+
+function meanscale(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
+    (X .- spec.μ') ./ spec.σ'
 end
 
-function meanscale(X::AbstractMatrix{T}; ϵ = 1e-3) where T <: Real
-    Z = X ./ std(X, dims = 1)
-    Z .-= mean(Z, dims = 1)
+
+function posscale(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
+    Z = (X .- spec.minim') ./ spec.σ' * 5 .+ spec.ϵ
 end
 
-function transf1(X::AbstractMatrix{T}) where T <: Real
-    sqrt.(posscale(X))
+
+"""Transform data and construct TransfSpec"""
+function standard_transformations(X::AbstractMatrix{T}; deg = 2, ϵ = 1e-2) where T <: Real
+    μ = mean(X, dims=1)[:]
+    σ = std(X, dims=1)[:]
+    minim = minimum(X, dims=1)[:]
+    spec = TransfSpec(μ, σ, minim, ϵ, deg)
+
+    return standard_transformations(X, spec), spec
 end
 
-function transf2(X::AbstractMatrix{T}) where T <: Real
-    log.(posscale(X))
-end
 
-function standard_transformations(X::AbstractMatrix{T}; deg = 2) where T <: Real
-    Z = hcat(meanscale(X), transf1(X), transf2(X))
-    Z = polyexpand(Z, deg)
+"""Transform inputs using a pre-computed TransfSpec"""
+function standard_transformations(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
+    h = posscale(X, spec)
+    h[h .< 1e-12] .= 1e-12 # must ensure positivity
+    Z = hcat(meanscale(X, spec), sqrt.(h), log.(h))
+    Z = polyexpand(Z, spec.deg)
     Z[:, 1:size(X)[2]] .= X
     Z
 end
 
-function standard_transformations(X::AbstractVector{T}; deg = 2) where T <: Real
-    Z = standard_transforms(reshape(X, (length(X), 1)))
+
+function standard_transformations(x::AbstractVector{T}, spec::TransfSpec{T}) where T <: Real
+    standard_transformations(reshape(X, (1, length(x))), spec)
 end
 
 
@@ -113,4 +132,3 @@ function gaussianize_transforms(y::Vector{T}; iqr = .99) where T <: Real
 
     return transf, invtransf
 end
-
