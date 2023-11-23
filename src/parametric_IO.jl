@@ -87,7 +87,7 @@ function save_GPGeometry(geom::GPGeometry{T}, G::JLD2.Group) where T <: Real
 end
 
 
-function load_GPGeometry(G::JLD2.Group) where T <: Real
+function load_GPGeometry(G::JLD2.Group)
 
     σX = G["Xstd"]
     μX = G["Xmean"]
