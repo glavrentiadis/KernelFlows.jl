@@ -63,7 +63,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    scale_Y::Bool = true) where T <: Real
 
     # Do not use more CCA / PCA dims than there are dimensions
-    nYCCA = min(nYCCA, size(Y)[2], size(X)[2])
+    nYCCA = min(nYCCA, size(Y)[2])
     nYPCA = min(nYPCA, size(Y)[2] - nYCCA)
     nYCCA == 0 && (reg_CCA = 0.0)
 

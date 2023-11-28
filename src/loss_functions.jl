@@ -35,7 +35,7 @@ function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Functi
 end
 
 
- function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
      Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
      return (yₛ' * inv(Symmetric(Ω)) * yₛ)[1]
