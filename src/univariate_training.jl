@@ -71,16 +71,17 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     X_full = X
     ζ_full = ζ
 
-    reg = 1e-8
+    reg = 1e-3
 
     ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]; nXlinear) +
         reg * sum(exp.(logα[1:nXdims]))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
 
-    all_s = get_random_partitions(ndata, n, niter)
-    all_s = collect(eachrow(all_s))
 
     nl = 5
+    s_gridr = get_random_partitions(ndata, n, ngridrounds * nl)
+    s_gridr = collect(eachrow(s_gridr))
+
     test_logα = logα₀[:]
     for j ∈ 1:ngridrounds # This many rounds of grid optimizations
         quiet || println("Grid optimization round $j")
@@ -90,7 +91,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
             tlogα[:,i] .+= collect(range(-2., 2., nl))
             start_ξ_vals = zeros(nl)
-            ss = [all_s[k] for k ∈ randperm(niter)[1:25]]
+            ss = [s_gridr[k] for k ∈ (j-1)*nl+1:j*nl]
 
             Threads.@threads for k ∈ 1:nl
                 ξ_val = @views sum([ξ(X[s,:], ζ[s], tlogα[k,:]) for s ∈ ss])
