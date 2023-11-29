@@ -32,8 +32,8 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs 
     Cxy = @view C[ndx+1:end,1:ndx]
     Cyy = @view C[ndx+1:end,ndx+1:end]
 
-    Cxx[diagind(Cxx)] .*= (1. + reg)
-    Cyy[diagind(Cyy)] .*= (1. + reg)
+    Cxx[diagind(Cxx)] .+= reg
+    Cyy[diagind(Cyy)] .+= reg
 
     CxxI = inv(Cxx)
     CyyI = inv(Cyy)
