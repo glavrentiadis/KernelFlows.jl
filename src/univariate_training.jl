@@ -106,8 +106,12 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
-    m = 50 # number of past gradients to average over
-    avg = zeros(length(logα), m)
+    # m = 5 # ndata ÷ n # number of past gradients to average over
+    # avg = zeros(length(logα), m)
+
+    # minibatches
+    all_s = get_random_partitions(ndata, n, niter)
+    all_s = collect(eachrow(all_s))
 
     grad = zero(logα) # buffer
     g = similar(grad) # buffer
@@ -129,11 +133,12 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
         gradnorm = gn(g)
         b .= ϵ * g / gradnorm # cap this timestep's gradient at ϵ
-        b .= sign.(b) .* max.(0.01*ϵ, abs.(b)) # move all parameters by at least 0.01*ϵ
+        logα .-= b
 
-        avg[:, i%m + 1] .= b
-        bb .= @views sum(avg, dims = 2)[:] # average contribution (unscaled)
-        logα .-= b + bb ./ gn(bb) .* ϵ
+        # b .= sign.(b) .* max.(0.01*ϵ, abs.(b)) # move all params by at least 0.01*ϵ
+        # avg[:, i%m + 1] .= g
+        # bb .= @views sum(avg, dims = 2)[:] # average contribution (unscaled)
+        # (niter > m) && (logα .-= bb ./ gn(bb) .* ϵ)
     end
 
     quiet || println("Final kernel parameters: $logα")
