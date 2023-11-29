@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export ρ_LOI, ρ_KF, ρ_LOO, ρ_MLE, ρ_RMSE, ρ_abs
+export ρ_LOI, ρ_KF, ρ_LOO, ρ_MLE, ρ_RMSE, ρ_abs, ρ_L2_with_unc
 
 
 # using Zygote
@@ -117,34 +117,43 @@ end
 
 
 # Minimize cross-validated RMSE directly (L2 loss).
-function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = false, nXlinear = 1) where T
-    # If predictonlycenter == true, predicts only a few center points,
-    # around which training data has been sampled. Make sure that
-    # minibatch_method in Parametric.jl is set to "neighborhood".
+function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = true, nXlinear = 1) where T
     Ω = kernel_matrix(X, k, logθ; nXlinear)
+
     Ω⁻¹ = inv(Ω)
-    N = length(y)
-    # Predict this many points closest to the center, or everything
-    M = predictonlycenter ? 3 : N
+    n = length(y)
+
+    # With predictonlycenter, points on the edges of the minibatch are
+    # not predicted. May improve performance / accuracy.
+    s = sortperm(sum(Ω, dims = 2)[:], rev=true)
+    M = predictonlycenter ? 2 * n ÷ 3 : n
+
     tot = 0.
 
-    for i ∈ 1:M
-        m = [1:i-1; i+1:N]
-        tot +=  @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y[m] - y[i])^2
+    for (j,i) ∈ enumerate(s[1:M])
+        m = [1:i-1; i+1:n]
+        t = @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y[m] - y[i])^2
+        tot += t
     end
 
-    return tot / N
+    return tot / n
 end
 
 
-function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1) where T <: Real
+function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1, predictonlycenter::Bool = false) where T <: Real
     Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     n = length(y)
     L2tot = 0.0
     vartot = 0.0
 
-    for i ∈ 1:n
+    # Predict this many points closest to the center, or everything
+    s = sortperm(sum(Ω, dims = 2)[:], rev=true)
+    # Unlike with ρ_RMSE, one should not leave too many points out
+    # here. Otherwise the standard deviations go wrong.
+    M = predictonlycenter ? 95 * n ÷ 100 : n
+
+    for (j,i) ∈ enumerate(s[1:M])
         m = [1:i-1; i+1:n]
         A = @views Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m]
         δ = @views A * y[m] - y[i]
