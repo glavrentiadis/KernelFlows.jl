@@ -125,12 +125,11 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, l
 
     # With predictonlycenter, points on the edges of the minibatch are
     # not predicted. May improve performance / accuracy.
-    s = sortperm(sum(Ω, dims = 2)[:], rev=true)
-    M = predictonlycenter ? 2 * n ÷ 3 : n
 
+    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:max(2n÷3, 8)], rev=true) : 1:n
     tot = 0.
 
-    for (j,i) ∈ enumerate(s[1:M])
+    for i in s
         m = [1:i-1; i+1:n]
         t = @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y[m] - y[i])^2
         tot += t
@@ -140,7 +139,7 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, l
 end
 
 
-function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1, predictonlycenter::Bool = false) where T <: Real
+function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1, predictonlycenter::Bool = true) where T <: Real
     Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     n = length(y)
