@@ -30,6 +30,8 @@ struct GPModel{T}
     zytransf::Function    # nonlinear 1-d output transformations
     zyinvtransf::Function # inverse 1-d output transformations
     ρ_values::Vector{T} # loss function values from latest training
+    λ_training::Matrix{T} # scaling factors from last trainign
+    θ_training::Matrix{T} # kernel parameters from last training
 end
 
 
@@ -50,16 +52,20 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
     transform_zy && ((zytransf, zyinvtransf) = gaussianize_transforms(zy_tr))
     ζ = zytransf.(zy_tr)
 
-    ntr, nZXdims = size(ZX_tr)
+    ntr, nλ = size(ZX_tr)
 
     h = zeros(ntr)
-    λ == nothing && (λ = ones(nZXdims))
+    λ == nothing && (λ = 1e0 .* ones(nλ))
     θ == nothing && (θ = exp.([0., 0., -4., -7.]))
+    # θ == nothing && (θ = exp.([0., 0., 0., 0.]))
 
-    @assert length(λ) == nZXdims "Invalid λ length"
-    @assert length(θ) == 4 "Invalid θ length"
+    @assert length(λ) == nλ "Invalid λ length"
+    nθ = length(θ)
+    @assert nθ == 4 "Invalid θ length"
 
-    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, zeros(10000))
+    nsave = 10000
+
+    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, zeros(nsave), zeros(nλ, nsave), zeros(nθ, nsave))
 end
 
 

@@ -44,6 +44,8 @@ function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["lambda"] = M.λ
     G["theta"] = M.θ
     G["rho_values"] = M.ρ_values
+    G["lambda_training"] = M.λ_training
+    G["theta_training"] = M.θ_training
     G["kernel"] = string(M.kernel)
 end
 
@@ -62,8 +64,10 @@ function load_GPModel(G::JLD2.Group)
     θ = G["theta"]
     ρ_values = G["rho_values"]
     kernel = kerneltable[G["kernel"]]
+    λ_training = G["lambda_training"]
+    θ_training = G["theta_training"]
 
-    GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values)
+    GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values, λ_training, θ_training)
 end
 
 
@@ -123,12 +127,13 @@ end
 
 
 """Function to load an MVGPModel object from file"""
-function load_MVGPModel(fname::String)
+function load_MVGPModel(fname::String; grpname::Union{Nothing, String} = nothing)
 
     local MVM
 
     jldopen(fname, "r") do file
-        MVM = load_MVGPModel(file.root_group)
+        grp = (grpname == nothing) ? file.root_group : file[grpname]
+        MVM = load_MVGPModel(grp)
     end
 
     MVM

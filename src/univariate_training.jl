@@ -48,8 +48,13 @@ function train!(M::GPModel{T}, ρ::Function;
 
     update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear, skip_K_update)
     M.ρ_values .= 0
+    M.λ_training .= 0
+    M.θ_training .= 0
     m = min(length(M.ρ_values), length(flowres.ρ_values))
     M.ρ_values[1:m] .= flowres.ρ_values[1:m]
+    α_all = hcat(flowres.α_values...)
+    M.λ_training[:,1:m] .= α_all[1:nλ,1:m]
+    M.θ_training[:,1:m] .= α_all[nλ+1:end,1:m]
     M
 end
 
