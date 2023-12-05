@@ -22,11 +22,11 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
                 T <: Real
 
     if !quiet
-        println("Initial scaling factors:")
-        display(vcat([M.λ' for M in MVM.Ms]...))
+        println("Initial scaling factors (log):")
+        display(log.(vcat([M.λ' for M in MVM.Ms]...)))
 
-        println("Initial kernel parameters:")
-        display(vcat([M.θ' for M in MVM.Ms]...))
+        println("Initial kernel parameters (log):")
+        display(log.(vcat([M.θ' for M in MVM.Ms]...)))
     end
 
     Threads.@threads for k ∈ ζcomps
@@ -36,11 +36,11 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
     end
 
     if !quiet
-        println("Final scaling factors:")
-        display(vcat([M.λ' for M in MVM.Ms]...))
+        println("Final scaling factors (log):")
+        display(log.(vcat([M.λ' for M in MVM.Ms]...)))
 
-        println("Final kernel parameters:")
-        display(vcat([M.θ' for M in MVM.Ms]...))
+        println("Final kernel parameters (log):")
+        display(log.(vcat([M.θ' for M in MVM.Ms]...)))
     end
 
 

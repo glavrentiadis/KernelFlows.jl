@@ -38,9 +38,10 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
     for (i,M) ∈ collect(enumerate(MVM.Ms))
+        print("\rUpdating GP $i / $(length(MVM.Ms))...")
         update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear = MVM.G.Xprojs[i].spec.nCCA)
     end
-
+    println("done!")
     MVM
 end
 

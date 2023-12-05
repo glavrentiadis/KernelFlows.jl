@@ -33,6 +33,7 @@ function quantileplot(Y_te::AbstractMatrix{T}, Y_te_pred::AbstractMatrix{T}, wl,
     p
 end
 
+
 """Convenience function for subplots of matrixplot_preds"""
 function pl!(p, x::Vector{T}, y::Vector{T}, y_pred::Vector{T};
              diff = false) where T <: Real
@@ -43,19 +44,20 @@ function pl!(p, x::Vector{T}, y::Vector{T}, y_pred::Vector{T};
 end
 
 
-
 function matrixplot_preds(X_te::AbstractMatrix{T}, G::GPGeometry{T},
                           ZY_te::AbstractMatrix{T}, ZY_te_pred::AbstractMatrix{T};
-                          diff = false, origspace = false) where T <: Real
+                          diff = false, origspace = false,
+                          plot_dummyXdims::Bool = true) where T <: Real
 
 
     npcs = size(ZY_te_pred)[2]
 
-    npars = [size(Xproj.vectors)[2] for Xproj in G.Xprojs]
+    npars = plot_dummyXdims ? [size(Xproj.vectors)[2] for Xproj in G.Xprojs] :
+        [Xproj.spec.nCCA for Xproj in G.Xprojs]
     npars = origspace ? [size(X_te)[2] for _ in G.Xprojs] : npars
     npars_max = maximum(npars)
 
-    p = plot(layout = (npcs,npars_max), size = (3000,1500), top_margin = -6mm)
+    p = plot(layout = (npcs, npars_max), size = (3200,2000), top_margin = -6mm)
 
     for i ∈ 1:npcs
         ZX_te = origspace ? X_te : reduce_X(X_te, G, i)
