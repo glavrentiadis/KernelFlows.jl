@@ -79,7 +79,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     reg = 1e-3
 
     ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]; nXlinear) +
-        reg * sum(exp.(logα[1:nXdims]))
+        reg * sum(exp.(logα))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
 
 
