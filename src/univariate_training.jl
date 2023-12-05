@@ -36,7 +36,7 @@ end
 function train!(M::GPModel{T}, ρ::Function;
                 ϵ::T = .05, niter::Int = 500, n::Int = 48, ngridrounds::Int = 6,
                 navg::Union{Nothing, Int} = nothing, nXlinear::Int = 1,
-                quiet::Bool = false) where T <: Real
+                skip_K_update::Bool = false, quiet::Bool = false) where T <: Real
 
     α₀ = vcat(M.λ, M.θ)
     nλ = length(M.λ)
@@ -46,7 +46,7 @@ function train!(M::GPModel{T}, ρ::Function;
                    ϵ, niter, n, ngridrounds, nXlinear, quiet)
     α = best_α_from_flowres(flowres; navg, quiet)
 
-    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear)
+    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear, skip_K_update)
     M.ρ_values .= 0
     m = min(length(M.ρ_values), length(flowres.ρ_values))
     M.ρ_values[1:m] .= flowres.ρ_values[1:m]

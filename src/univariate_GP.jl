@@ -72,7 +72,8 @@ function update_GPModel!(M::GPModel{T};
                          newθ::Union{Nothing, Vector{T}} = nothing,
                          buf1::Union{Nothing, Matrix{T}} = nothing,
                          buf2::Union{Nothing, Matrix{T}} = nothing,
-                         nXlinear::Int = 1) where T <: Real
+                         nXlinear::Int = 1,
+                         skip_K_update::Bool = false) where T <: Real
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
@@ -87,14 +88,16 @@ function update_GPModel!(M::GPModel{T};
         M.θ .= newθ
     end
 
-    # Allocate buffers
-    ntr = length(M.ζ)
-    (buf1 == nothing) && (buf1 = zeros(ntr, ntr))
-    (buf2 == nothing) && (buf2 = zeros(ntr, ntr))
+    if !skip_K_update
+        # Allocate buffers
+        ntr = length(M.ζ)
+        (buf1 == nothing) && (buf1 = zeros(ntr, ntr))
+        (buf2 == nothing) && (buf2 = zeros(ntr, ntr))
 
-    KI = kernel_matrix_fast(M.Z, buf1, buf2, M.kernel, M.θ;
-                            precision = true, nXlinear)
-    mul!(M.h, KI, M.ζ)
+        KI = kernel_matrix_fast(M.Z, buf1, buf2, M.kernel, M.θ;
+                                precision = true, nXlinear)
+        mul!(M.h, KI, M.ζ)
+    end
 
     M
 end
