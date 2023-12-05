@@ -30,18 +30,27 @@ function X needs to be given in reduced coordinates.
 function predict(M::GPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 buf::Union{Nothing, Matrix{T}} = nothing,
+                 workbuf::Union{Nothing, Matrix{T}} = nothing,
+                 outbuf::Union{Nothing, Matrix{T}} = nothing,
                  nXlinear::Int = 1) where T <: Real
 
     apply_λ && (X .*= M.λ')
 
-    # Allocate buffer if not given
-    (buf == nothing) && (buf = zeros(size(X)[1], length(M.h)))
-
+    # Allocate if buffers not given
+    (workbuf == nothing) && (workbuf = zeros(size(X)[1], length(M.h)))
+    (outbuf == nothing) && (outbuf = zeros(size(X)[1]))
     s = Euclidean()
-    pairwise!((a,b) -> M.kernel(s(a,b); M.θ), buf, eachrow(X), eachrow(M.Z))
 
-    buf += @views M.θ[end - 1] * X[:,1:nXlinear] * M.Z[:,1:nXlinear]'
+    # This is a cheap way to compute distances
+    pairwise!(s, workbuf, X, M.Z, dims = 1)
+    workbuf .= M.kernel.(workbuf, M.θ[1], M.θ[2])
 
-    ret = apply_zyinvtransf ? M.zyinvtransf.(buf * M.h) : buf * M.h
+    # mul! won't accept AbstractArrays, but gemm! does not mind
+    BLAS.gemm!('N', 'T', M.θ[end - 1], (@view X[:,1:nXlinear]),
+               (@view M.Z[:,1:nXlinear]), one(T), workbuf)
+    mul!(outbuf, workbuf, M.h)
+
+    apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
+
+    outbuf
 end

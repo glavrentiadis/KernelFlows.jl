@@ -19,22 +19,20 @@ export spherical_sqexp, spherical_exp, Matern32, Matern52
 # Parameters: first is always weight of the component, second is the
 # length scale.
 
-function spherical_sqexp(d::T; θ::AbstractVector) where T <: Real
-    # Assume that dimensions have been scaled before, so that only a
-    # spherical kernel will be needed. d is the Euclidean distance.
-    θ[1] * exp(-.5d^2 / θ[2])
-end
+spherical_sqexp(d::T, a::T, b::T) where T <: Real = a * exp(-.5d*d / b)
+spherical_sqexp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_sqexp(d, θ[1], θ[2])
 
-function spherical_exp(d::T; θ::AbstractVector{T}) where T <: Real
-    θ[1] * exp(-d / θ[2])
-end
+spherical_exp(d::T, a::T, b::T) where T <: Real = a * exp(-d / b)
+spherical_exp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_exp(d, θ[1], θ[2])
 
-function Matern32(d::T; θ::AbstractVector{T}) where T <: Real
-    h = sqrt(3) * d / θ[2] # d is Euclidean distance
-    θ[1] * (1. + h) * exp(-h)
+function Matern32(d::T, a::T, b::T) where T <: Real
+    h = sqrt(3.) * d / b # d is Euclidean distance
+    a * (1. + h) * exp(-h)
 end
+Matern32(d::T; θ::AbstractVector{T}) where T <: Real = Matern32(d, θ[1], θ[2])
 
-function Matern52(d::T; θ::AbstractVector{T}) where T <: Real
-    h = sqrt(5) * d / θ[2]
-    θ[1] * (1. + h + h^2 / 3) * exp(-h)
+function Matern52(d::T, a::T, b::T) where T <: Real
+    h = sqrt(5.) * d / b
+    a * (1. + h + h^2 / 3.) * exp(-h)
 end
+Matern52(d::T; θ::AbstractVector{T}) where T <: Real = Matern52(d, θ[1], θ[2])

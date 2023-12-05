@@ -31,18 +31,23 @@ RMSE(Y_true, Y_pred) = sqrt(sum((Y_true - Y_pred).^2)/size(Y_pred)[1])
 function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::AbstractMatrix{T}, k::Function, θ::AbstractVector{T}; precision = true, nXlinear::Int = 1) where T <: Real
     s = Euclidean()
 
-    pairwise!((a,b) -> k(s(a,b); θ = θ[end-3:end-2]), buf1, eachrow(X), eachrow(X), symmetric = true)
+    pairwise!(s, buf1, X, dims = 1)
+    buf1 .= k.(buf1, θ[1], θ[2])
+
     buf1[diagind(buf1)] .+= max(exp(-15.), θ[end])
     lf = θ[end-1] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
-    XXt = X[:,1:nXlinear] * X[:,1:nXlinear]'
+    @views BLAS.gemm!('N', 'T', lf, X[:,1:nXlinear], X[:,1:nXlinear], 1., buf1)
 
-    # Linear component with full input array X; for swapping you'll
-    # also need to change GP_predict()
-    # XXt = X * X'
+    if precision
+        L = cholesky!(buf1)
+        ldiv!(buf2, L, UniformScaling(1.)(size(X)[1]))
+    else
+        buf2 .= Symmetric(buf1)
+    end
 
-    return precision ? ldiv!(buf2, cholesky!(buf1 + lf * XXt), UniformScaling(1.)(size(X)[1])) : Symmetric(buf1) + lf * XXt
+    buf2
 end
 
 
@@ -68,7 +73,7 @@ function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector;
     # Linear component only for first X dimension
     KK = @views X[:,1:nXlinear] * X[:,1:nXlinear]'
     H1 = pairwise_Euclidean(X)
-    H2 = k.(H1; θ = exp.(logθ[1:end-2])) +
+    H2 = k.(H1, exp(logθ[1]), exp(logθ[2])) +
       Diagonal(exp(max(logθ[end], -15.)) * ones(size(X)[1])) + exp(logθ[end-1]) * KK
 
     H2
