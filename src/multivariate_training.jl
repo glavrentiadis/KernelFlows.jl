@@ -21,12 +21,26 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
                 skip_K_update::Bool = false, quiet::Bool = false) where
                 T <: Real
 
+    if !quiet
+        println("Initial scaling factors:")
+        display(vcat([M.λ' for M in MVM.Ms]...))
+
+        println("Initial kernel parameters:")
+        display(vcat([M.θ' for M in MVM.Ms]...))
+    end
+
     Threads.@threads for k ∈ ζcomps
         nXlinear = MVM.G.Xprojs[k].spec.nCCA
         train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
                skip_K_update = true, quiet, nXlinear)
     end
 
+    if !quiet
+        println("Final scaling factors:")
+        display(vcat([M.λ' for M in MVM.Ms]...))
+
+        println("Final kernel parameters:")
+        display(vcat([M.θ' for M in MVM.Ms]...))
     end
 
 

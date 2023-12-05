@@ -102,7 +102,6 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     end
 
     logα = test_logα # rename this now that we have a starting point guess
-    quiet || println("Starting point for kernel parameters: $logα")
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
@@ -140,8 +139,6 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
         # bb .= @views sum(avg, dims = 2)[:] # average contribution (unscaled)
         # (niter > m) && (logα .-= bb ./ gn(bb) .* ϵ)
     end
-
-    quiet || println("Final kernel parameters: $logα")
 
     flowres
 end
