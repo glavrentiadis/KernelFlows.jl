@@ -15,6 +15,8 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
+export save_MVGPModel, load_MVGPModel
+
 
 using JLD2
 
