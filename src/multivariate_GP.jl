@@ -76,7 +76,7 @@ end
 function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Real
     ntr = length(s)
     Ms = [GPModel(M.ζ[s], zeros(ntr), M.Z[s,:], M.λ[:], M.θ[:],
-                  M.kernel, M.zytransf, M.zyinvtransf, zero(M.ρ_values)) for M ∈ MVM.Ms]
+                  M.kernel, M.zytransf, M.zyinvtransf, zero(M.ρ_values), zero(M.λ_training), zero(M.θ_training)) for M ∈ MVM.Ms]
     MVM_new = MVGPModel(Ms, MVM.G)
     update_MVGPModel!(MVM_new)
 end
