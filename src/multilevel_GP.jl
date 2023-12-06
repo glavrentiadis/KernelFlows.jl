@@ -41,8 +41,9 @@ function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
     Y_tr_ste_pred = predict(MVM1, X_tr_ste)
     Ydiff_tr_ste = Y_tr[s_te,:] - Y_tr_ste_pred # Training labels for new GP
 
-    augment_X_with_Y_residuals = false
-    X_tr_new = augment_X_with_Y_residuals ? hcat(Y_tr_ste_pred, X_tr_ste) : X_tr_ste
+    augment_X_with_Y_predictions = true
+    X_tr_new = augment_X_with_Y_predictions ? hcat(Y_tr_ste_pred, X_tr_ste) : X_tr_ste
+
     # New dimension reduction for residual model
     G = dimreduce(X_tr_new, Ydiff_tr_ste; dimreduceargs...)
     
