@@ -24,6 +24,7 @@ module KernelFlows
 include("kernel_functions.jl")
 include("loss_functions.jl")
 
+include("standard_transformations.jl")
 include("dimension_reduction.jl")
 include("cca.jl")
 
@@ -31,6 +32,5 @@ include("parametric_models.jl")
 include("nonparametric_models.jl")
 
 include("common_utils.jl")
-include("standard_transformations.jl")
 
 end # module KernelFlows

@@ -16,31 +16,31 @@
 #
 function train!(MVM::MVGPModel{T}, ρ::Function;
                 ϵ::T = .05, niter::Int = 500, n::Int = 32,
-                ngridrounds::Int = 6, navg::Union{Nothing, Int} = nothing,
+                ngridrounds::Int = 0, navg::Union{Nothing, Int} = nothing,
                 ζcomps::AbstractVector{Int} = 1:length(MVM.Ms),
                 skip_K_update::Bool = false, quiet::Bool = false) where
                 T <: Real
 
     if !quiet
         println("Initial scaling factors (log):")
-        display(log.(vcat([M.λ' for M in MVM.Ms]...)))
+        display(round.(log.(vcat([M.λ' for M in MVM.Ms]...)), sigdigits = 2))
 
         println("Initial kernel parameters (log):")
-        display(log.(vcat([M.θ' for M in MVM.Ms]...)))
+        display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
     end
 
     Threads.@threads for k ∈ ζcomps
         nXlinear = MVM.G.Xprojs[k].spec.nCCA
         train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
-               skip_K_update = true, quiet, nXlinear)
+               skip_K_update, quiet, nXlinear)
     end
 
     if !quiet
         println("Final scaling factors (log):")
-        display(log.(vcat([M.λ' for M in MVM.Ms]...)))
+        display(round.(log.(vcat([M.λ' for M in MVM.Ms]...)), sigdigits = 2))
 
         println("Final kernel parameters (log):")
-        display(log.(vcat([M.θ' for M in MVM.Ms]...)))
+        display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
     end
 
 
