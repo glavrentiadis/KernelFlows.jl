@@ -14,39 +14,99 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export MVGPModel_twolevel
+export TwoLevelMVGP
+
+struct TwoLevelMVGP{T}
+    MVM1::MVGPModel{T} # First-level model
+    MVM2::MVGPModel{T} # Second-level model
+    projvecs::Union{Nothing, Matrix{T}} # Projection vector for augmenting inputs for 2nd level
+end
+
 
 """Construct twolevel model from an existing MVGPModel. Training
 inputs and outputs need to be resupplied to this function, since
 reconstructing them may or may not work, depending on what dimension
 reduction was used in the first place. Especially the augmented
 methods that are used for the input space can cause errors."""
-function MVGPModel_twolevel(MVM::MVGPModel{T}, # Upper level model
-                            X_tr::Matrix{T},   # Training inputs for MVM
-                            Y_tr::Matrix{T};   # Training outputs for MVM
-                            s_tr::Union{Nothing, AbstractVector{Int}} = nothing,
-                            s_te::Union{Nothing, AbstractVector{Int}} = nothing,
-                            kernel::Function = MVM.Ms[1].kernel,
-                            dimreduceargs::NamedTuple = (nYCCA = 1, nYPCA = 1, nXCCA = 1),
-                            transform_zy = false) where T <: Real
+function TwoLevelMVGP(MVM1::MVGPModel{T}, # Upper level model
+                      X_tr::Matrix{T},   # Training inputs for second-level MVM
+                      Y_tr::Matrix{T};   # Training outputs for second-level MVM
+                      kernel::Function = MVM1.Ms[1].kernel,
+                      dimreduceargs::NamedTuple = (nYCCA = 1, nYPCA = 1, nXCCA = 1),
+                      nvec_for_X_aug::Int = 0,
+                      transform_zy = false) where T <: Real
 
-    # Divide data as given by s_tr or in half
-    ntr = size(MVM.Ms[1].Z)[1]
-    (s_tr == nothing) && (s_tr = randperm(ntr)[1:ntr÷2])
-    (s_te == nothing) && (s_te = setdiff(1:ntr, s_tr))
+    Y_tr_pred = predict(MVM1, X_tr)
+    Ydiff_tr = Y_tr - Y_tr_pred # Training labels for new GP
 
-    # Construct residual training data
-    MVM1 = trim_MVGP_data(MVM, s_tr)
-    X_tr_ste = X_tr[s_te,:] # Training inputs for new GP
-    Y_tr_ste_pred = predict(MVM1, X_tr_ste)
-    Ydiff_tr_ste = Y_tr[s_te,:] - Y_tr_ste_pred # Training labels for new GP
-
-    augment_X_with_Y_predictions = true
-    X_tr_new = augment_X_with_Y_predictions ? hcat(Y_tr_ste_pred, X_tr_ste) : X_tr_ste
+    if nvec_for_X_aug > 0
+        Y_projvecs = get_PCA_vectors(Y_tr_pred, nvec_for_X_aug)[1]
+        display(Y_projvecs)
+        X_tr_new = hcat(Y_tr_pred * Y_projvecs, X_tr)
+    else
+        Y_projvecs = nothing
+        X_tr_new = X_tr
+    end
 
     # New dimension reduction for residual model
-    G = dimreduce(X_tr_new, Ydiff_tr_ste; dimreduceargs...)
-    
+    G = dimreduce(X_tr_new, Ydiff_tr; dimreduceargs...)
+
     # Return second level model
-    MVM2 = MVGPModel(X_tr_new, Ydiff_tr_ste, kernel, G; transform_zy)
+    MVM2 = MVGPModel(X_tr_new, Ydiff_tr, kernel, G; transform_zy)
+    TwoLevelMVGP(MVM1, MVM2, Y_projvecs)
+end
+
+
+function LOO_predict_training(MVM::MVGPModel{T}) where T <: Real
+
+    ndata = size(MVM.Ms[1].Z)[1]
+    nM = length(MVM.Ms)
+    buf1s = [zeros(ndata, ndata) for _ in 1:nM]
+    buf2s = [zeros(ndata, ndata) for _ in 1:nM]
+
+    ZY_pred = zeros(ndata, nM)
+    Threads.@threads for (j,M) in collect(enumerate(MVM.Ms))
+        Ω⁻¹ = kernel_matrix_fast(M.Z, buf1s[j], buf2s[j], M.kernel, M.θ, nXlinear = MVM.G.Xprojs[j].spec.nCCA, precision = true)
+        Ω = Symmetric(buf1s[j]')[:,:]
+
+        buf = zeros(ndata - 1, ndata - 1)
+        buff = zeros(ndata, ndata)
+        z = zeros(ndata)
+        b = zeros(ndata)
+        b2 = zeros(ndata)
+
+        for i in 1:ndata
+            (i % 100 == 0) && println(i)
+            m = [1:i-1; i+1:ndata]
+            buff .= Ω⁻¹
+            b .= @view Ω⁻¹[:,i]
+            b2 .= @view Ω[:,i]
+            cc = -1. /b[i]
+            BLAS.ger!(cc, b, b, buff)
+            buff[:,i] .= 0.
+            buff[i,:] .= 0.
+            @views  BLAS.symv!('U', 1., buff, b2, 0., z)
+            ZY_pred[i,j] =  z' * M.ζ
+
+            # ZY_pred[i,j] = @time @views Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * M.ζ[m] # - M.ζ[i]
+        end
+    end
+
+    Y_tr_pred_LOO = recover_Y(ZY_pred, MVM.G)
+
+
+end
+
+
+function train!(MVT::TwoLevelMVGP{T}, ρ::Function; trainingargs::NamedTuple) where T <: Real
+    train!(MVT.MVM1, ρ; trainingargs...)
+    train!(MVT.MVM2, ρ; trainingargs...)
+end
+
+
+function predict(MVT::TwoLevelMVGP{T}, X::AbstractArray{T}) where T <: Real
+    Y1 = predict(MVT.MVM1, X)
+    X2 = MVT.projvecs == nothing ? X : hcat(Y1 * MVT.projvecs, X)
+    Y2 = predict(MVT.MVM2, X2)
+    Y1, Y2
 end
