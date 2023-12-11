@@ -40,6 +40,7 @@ struct GPGeometry{T}
     μY::Vector{T} # output (Y) mean
     σY::Vector{T} # output standard deviation
     reg_CCA::T # CCA regular
+    Xtransfspec::Union{Nothing, TransfSpec{T}} # non-linear transformations
 end
 
 
@@ -57,10 +58,17 @@ five X dimensions.
 julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
 """
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
+                   Xtransf_deg::Int = 0, Xtransf_ϵ::T = 1e-2,
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
-                   dummyXdims::AbstractVector{Int} = 1:size(X)[2],
+                   dummyXdims::Union{Bool, AbstractVector{Int}} = true,
                    reg_CCA::T = 1e-2, maxdata::Int = 3000,
                    scale_Y::Bool = true) where T <: Real
+
+    (X, Xtransf_spec) = Xtransf_deg == 0 ? (X, nothing) :
+        standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
+
+    (dummyXdims == false) && (dummyXdims = 1:0)
+    (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
 
     # Do not use more CCA / PCA dims than there are dimensions
     nYCCA = min(nYCCA, size(Y)[2])
@@ -141,7 +149,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
         Xprojs[i].values[nXCCA+1:end] = dummyvals
     end
 
-    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA)
+    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA, Xtransf_spec)
 end
 
 
@@ -219,6 +227,7 @@ end
 
 
 function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int) where T <: Real
+    X = G.Xtransfspec == nothing ? X : standard_transformations(X, G.Xtransfspec)
     reduce(X, G.Xprojs[i], G.μX,  G.σX)
 end
 

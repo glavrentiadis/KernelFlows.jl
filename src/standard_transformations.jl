@@ -82,7 +82,7 @@ end
 function standard_transformations(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
     h = posscale(X, spec)
     h[h .< 1e-12] .= 1e-12 # must ensure positivity
-    Z = hcat(meanscale(X, spec), sqrt.(h), log.(h))
+    Z = hcat(meanscale(X, spec), sqrt.(h), log.(h), cosd.(X), sind.(X))
     Z = polyexpand(Z, spec.deg)
     Z[:, 1:size(X)[2]] .= X
     Z
