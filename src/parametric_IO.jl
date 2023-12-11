@@ -46,8 +46,8 @@ function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["lambda"] = M.λ
     G["theta"] = M.θ
     G["rho_values"] = M.ρ_values
-    G["lambda_training"] = M.λ_training
-    G["theta_training"] = M.θ_training
+    G["lambda_training"] = hcat(M.λ_training...)
+    G["theta_training"] = hcat(M.θ_training...)
     G["kernel"] = string(M.kernel)
 end
 
@@ -66,8 +66,8 @@ function load_GPModel(G::JLD2.Group)
     θ = G["theta"]
     ρ_values = G["rho_values"]
     kernel = kerneltable[G["kernel"]]
-    λ_training = G["lambda_training"]
-    θ_training = G["theta_training"]
+    λ_training = [c[:] for c in collect(eachcol(G["lambda_training"]))]
+    θ_training = [c[:] for c in eachcol(G["theta_training"])]
 
     GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values, λ_training, θ_training)
 end
@@ -112,8 +112,8 @@ end
 
 
 """Function to save an MVGPModel to a file or a new group in a file."""
-function save_MVGPModel(MVM::MVGPModel, fname::String; grpname::String = "")
-    jldopen(fname, "a+") do file
+function save_MVGPModel(MVM::MVGPModel, fname::String; grpname::String = "", mode::String = "a+")
+    jldopen(fname, mode) do file
         rootgrp = (grpname == "") ? file.root_group : JLD2.Group(file, grpname)
         for (i,M) in enumerate(MVM.Ms)
             (M.zytransf != identity) &&

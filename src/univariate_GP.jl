@@ -30,8 +30,8 @@ struct GPModel{T}
     zytransf::Function    # nonlinear 1-d output transformations
     zyinvtransf::Function # inverse 1-d output transformations
     ρ_values::Vector{T} # loss function values from latest training
-    λ_training::Matrix{T} # scaling factors from last trainign
-    θ_training::Matrix{T} # kernel parameters from last training
+    λ_training::Vector{Vector{T}} # scaling factors from training
+    θ_training::Vector{Vector{T}} # kernel parameters from training
 end
 
 
@@ -63,9 +63,7 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
     nθ = length(θ)
     @assert nθ == 4 "Invalid θ length"
 
-    nsave = 10000
-
-    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, zeros(nsave), zeros(nλ, nsave), zeros(nθ, nsave))
+    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[])
 end
 
 

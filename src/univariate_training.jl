@@ -44,17 +44,19 @@ function train!(M::GPModel{T}, ρ::Function;
     Z = M.Z ./ M.λ'
     flowres = flow(Z, M.ζ, ρ, M.kernel, α₀;
                    ϵ, niter, n, ngridrounds, nXlinear, quiet)
-    α = best_α_from_flowres(flowres; navg, quiet)
+
+    if niter > 0 # update parameters from training
+        α = best_α_from_flowres(flowres; navg, quiet)
+    elseif length(M.ρ_values) > 0 # use last training value
+        α = vcat(M.λ_training[end], M.θ_training[end])
+    else # if no training has been done, go with initial values
+        α = vcat(M.λ, M.θ)
+    end
 
     update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear, skip_K_update)
-    M.ρ_values .= 0
-    M.λ_training .= 0
-    M.θ_training .= 0
-    m = min(length(M.ρ_values), length(flowres.ρ_values))
-    M.ρ_values[1:m] .= flowres.ρ_values[1:m]
-    α_all = hcat(flowres.α_values...)
-    M.λ_training[:,1:m] .= α_all[1:nλ,1:m]
-    M.θ_training[:,1:m] .= α_all[nλ+1:end,1:m]
+    append!(M.ρ_values, flowres.ρ_values)
+    append!(M.λ_training, [α[1:nλ] for α in flowres.α_values])
+    append!(M.θ_training, [α[nλ+1:end] for α in flowres.α_values])
     M
 end
 
