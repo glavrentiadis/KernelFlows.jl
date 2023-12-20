@@ -23,7 +23,7 @@ using Distances
 using StatsBase
 
 """Version of ρ, where Nc = 1 and we average over all possible Xc."""
-function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1) where T
+function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear::Int = 1) where T
     n = length(yₛ)
     Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
@@ -35,7 +35,7 @@ function ρ_LOI(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Functi
 end
 
 
-function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+function ρ_LOI_2(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, buf::AbstractArray{Float64}, k::Function, logθ::Vector{T}; nXlinear::Int = 1) where T
      Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
      return (yₛ' * inv(Symmetric(Ω)) * yₛ)[1]
@@ -43,7 +43,7 @@ end
 
 
 """Maximum likelihood."""
-function ρ_MLE(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+function ρ_MLE(Xₛ::AbstractArray{T}, yₛ::AbstractVector{Float64}, k::Function, logθ::Vector{T}; nXlinear::Int = 1) where T
     n = length(yₛ)
     Ω = kernel_matrix(Xₛ, k, logθ; nXlinear)
 
@@ -69,7 +69,7 @@ end
 
 
 """Original version, converges slower but also works"""
-function ρ_KF(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+function ρ_KF(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear::Int = 1) where T
     Ω = kernel_matrix(Xf, k, logθ; nXlinear)
     Nc = size(Ω)[1] ÷ 2
     yc = @view yf[1:Nc]
@@ -80,7 +80,7 @@ end
 
 
 """Original version, with complement subbatching, slightly improves on original."""
-function ρ_complement(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear = 1) where T
+function ρ_complement(Xf::AbstractArray{T}, yf::AbstractArray{T}, k::Function, logθ::Vector{T}; nXlinear::Int = 1) where T
     Ω = kernel_matrix(Xf, k, logθ; nXlinear)
 
     nchunks = 2
@@ -102,7 +102,7 @@ end
 
 
 """Leave one out cross validation"""
-function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}; nXlinear = 1) where T
+function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector{T}; nXlinear::Int = 1) where T
     Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     N = length(y)
@@ -117,7 +117,7 @@ end
 
 
 # Minimize cross-validated RMSE directly (L2 loss).
-function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = true, nXlinear = 1) where T
+function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = false, nXlinear::Int = 1) where T
     Ω = kernel_matrix(X, k, logθ; nXlinear)
 
     Ω⁻¹ = inv(Ω)
@@ -126,7 +126,7 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, l
     # With predictonlycenter, points on the edges of the minibatch are
     # not predicted. May improve performance / accuracy.
 
-    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:max(2n÷3, 8)], rev=true) : 1:n
+    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:max(2n÷3, 50)], rev=true) : 1:n
     tot = 0.
 
     for i in s
@@ -139,7 +139,7 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, l
 end
 
 
-function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear = 1, predictonlycenter::Bool = true) where T <: Real
+function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; nXlinear::Int = 1, predictonlycenter::Bool = true) where T <: Real
     Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     n = length(y)
@@ -171,7 +171,7 @@ end
 
 
 """Same function as ρ_RMSE, but absolute error instead of squared"""
-function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector, predictonlycenter::Bool = false, nXlinear = 1) where T
+function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Function, logθ::AbstractVector; predictonlycenter::Bool = false, nXlinear::Int = 1) where T
     Ω = kernel_matrix(X, k, logθ; nXlinear)
     Ω⁻¹ = inv(Ω)
     N = length(y)
