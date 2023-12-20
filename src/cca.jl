@@ -38,10 +38,16 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs 
     CxxI = inv(Cxx)
     CyyI = inv(Cyy)
     R_X = CxxI * Cxy' * CyyI * Cxy
-    R_Y = CyyI * Cxy * CxxI * Cxy'
 
     F_X = fasteigs(R_X, nvecs; force_real = true)
-    F_Y = fasteigs(R_Y, nvecs; force_real = true)
+
+    # No need to compute Y vectors to get 1-d subspace of 1-d space
+    if size(Y)[2] > 1
+        F_Y = fasteigs(R_Y, nvecs; force_real = true)
+        R_Y = CyyI * Cxy * CxxI * Cxy'
+    else
+        F_Y = nothing
+    end
 
     F_X, F_Y
 end
