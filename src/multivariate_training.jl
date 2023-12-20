@@ -29,8 +29,8 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
         display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
     end
 
-    Threads.@threads for k ∈ ζcomps
-        nXlinear = MVM.G.Xprojs[k].spec.nCCA
+    Threads.@threads :static for k ∈ ζcomps
+        nXlinear = nXl(MVM, k)
         train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
                skip_K_update, quiet, nXlinear)
     end
@@ -42,7 +42,6 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
         println("Final kernel parameters (log):")
         display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
     end
-
 
     # Update the MVGPModels sequentially, if requested.
     skip_K_update || update_MVGPModel!(MVM)

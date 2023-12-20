@@ -34,7 +34,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
                  outbuf::Union{Nothing, Matrix{T}} = nothing,
                  nXlinear::Int = 1) where T <: Real
 
-    apply_λ && (X .*= M.λ')
+    apply_λ && (X = X .* M.λ')
 
     # Allocate if buffers not given
     (workbuf == nothing) && (workbuf = zeros(size(X)[1], length(M.h)))
@@ -46,7 +46,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     workbuf .= M.kernel.(workbuf, M.θ[1], M.θ[2])
 
     # mul! won't accept AbstractArrays, but gemm! does not mind
-    BLAS.gemm!('N', 'T', M.θ[end - 1], (@view X[:,1:nXlinear]),
+    BLAS.gemm!('N', 'T', M.θ[3], (@view X[:,1:nXlinear]),
                (@view M.Z[:,1:nXlinear]), one(T), workbuf)
     mul!(outbuf, workbuf, M.h)
 

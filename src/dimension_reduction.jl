@@ -20,8 +20,9 @@ export dimreduce, reduce, reduce_X, reduce_Y, recover, recover_Y
 struct ProjectionSpec
     nCCA::Int # number of CCA vecs
     nPCA::Int # total number of PCA vectors
-    ndummy::Int # number of scaling-only vecs
-    dummydims::AbstractVector{Int} # list of dummy dimensions
+    ndummy::Int # number of scaling-only vecs, used if nCCA == nPCA == 0
+    dummydims::AbstractVector{Int} # list of dummy dimensions (relevant for X)
+    sparsedims::Vector{Int} # use only vectors listed here (relevant for X)
 end
 
 
@@ -102,11 +103,13 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Allocate Projection objects for inputs
     Xprojs = Vector{Projection{T}}()
     for i in 1:nY
-        XSpec = ProjectionSpec(nXCCA, 0, length(dummyXdims), dummyXdims)
+        sparseXdims = collect(1:nXCCA + length(dummyXdims))
+        XSpec = ProjectionSpec(nXCCA, 0, length(dummyXdims), dummyXdims, sparseXdims)
         push!(Xprojs, Projection(zeros(size(X)[2], nX), zeros(nX), XSpec))
     end
 
-    YSpec = ProjectionSpec(nYCCA, nYPCA, nYdummy, 1:nYdummy)
+    sparseYdims = collect(1:nYCCA + nYPCA + nYdummy)
+    YSpec = ProjectionSpec(nYCCA, nYPCA, nYdummy, 1:nYdummy, sparseYdims)
     Yproj = Projection(zeros(size(Y)[2], nY), zeros(nY), YSpec)
 
     for i in 1:nYCCA
@@ -214,7 +217,7 @@ end
 coordinates."""
 function reduce(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T}) where T <: Real
     X = (X .- μ') ./ σ' # apply standardization
-    H = P.vectors ./ P.values'
+    @views H = P.vectors[:, P.spec.sparsedims] ./ P.values[P.spec.sparsedims]'
     X * H
 end
 
@@ -226,6 +229,9 @@ function recover(Z::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vect
 end
 
 
+"""Apply standard transformations and dimension reduction as described
+in GPGeometry object in G. This function does not scale the inputs
+according to learned kernel parameters"""
 function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int) where T <: Real
     X = G.Xtransfspec == nothing ? X : standard_transformations(X, G.Xtransfspec)
     reduce(X, G.Xprojs[i], G.μX,  G.σX)

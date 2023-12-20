@@ -135,7 +135,7 @@ function rebalance_data(X::AbstractMatrix{T}, nleave::Int, MVM::MVGPModel{T};
     ndata = size(X)[1]
     pw = zeros(ndata, ndata)
     for ydim in ydims
-        nXlinear == nothing ? MVM.G.Xprojs[ydim].spec.nCCA : nXlinear
+        nXlinear == nothing ? nXl(MVM, ydim) : nXlinear
         Z = reduce_X(X, MVM.G, ydim)
         pw .+= MVM.G.Yproj.values[ydim] * abs.(kernel_matrix(Z, MVM.Ms[ydim].kernel, log.(MVM.Ms[ydim].θ), nXlinear = 0))
     end

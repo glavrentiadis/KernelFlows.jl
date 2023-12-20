@@ -37,9 +37,12 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΛ))
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
-    for (i,M) ∈ collect(enumerate(MVM.Ms))
+    Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))
         print("\rUpdating GP $i / $(length(MVM.Ms))...")
-        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear = MVM.G.Xprojs[i].spec.nCCA)
+
+        # Linear kernel only affects CCA dims, but also account for sparsification
+        nXlinear = nXl(MVM, i)
+        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear)
     end
     println("done!")
     MVM
@@ -55,10 +58,6 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
 
                    transform_zy::Bool = false) where T <: Real
 
-    ntr = size(X_tr)[1]
-    buf1 = zeros(ntr, ntr)
-    buf2 = zeros(ntr, ntr)
-
     ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
 
@@ -72,6 +71,24 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
 end
 
 
+"""Get the standard number of X dimensions for linear kernel"""
+function nXl(MVM::MVGPModel{T}, i::Int) where T <: Real
+    spec = MVM.G.Xprojs[i].spec
+    nXl_max = spec.nCCA == 0 ? spec.ndummy : spec.nCCA
+    sum(spec.sparsedims .<= nXl_max)
+end
+
+
+
+"""Apply standard transformations and dimension reduction as described
+in GPGeometry object in G. This function scales the inputs according
+to learned kernel parameters. Use this function to produce inputs that
+correspond to values in matrix GPModel.Z."""
+function reduce_X(X::AbstractMatrix{T}, MVM::MVGPModel{T}, i::Int) where T <: Real
+    reduce_X(X, MVM.G, i) .* MVM.Ms[i].λ'
+end
+
+
 """From MVGP take only observations described by index vector s. Returns an entirely new MVGP object."""
 function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Real
     ntr = length(s)
@@ -79,6 +96,20 @@ function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Re
                   M.kernel, M.zytransf, M.zyinvtransf, T[], Vector{T}[], Vector{T}[]) for M ∈ MVM.Ms]
     MVM_new = MVGPModel(Ms, MVM.G)
     update_MVGPModel!(MVM_new)
+end
+
+
+function sparsify_inputs(MVM::MVGPModel{T}, nleave::Int) where T <: Real
+    Ms_new = GPModel{T}[]
+    G_new = deepcopy(MVM.G)
+
+    for (i,M) in enumerate(MVM.Ms)
+        newM, newdims = sparsify_inputs(M, nleave, MVM.G.Xprojs[i].spec.nCCA)
+        push!(Ms_new, newM)
+        keepat!(G_new.Xprojs[i].spec.sparsedims, newdims)
+    end
+
+    MVGPModel(Ms_new, G_new)
 end
 
 

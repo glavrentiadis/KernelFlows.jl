@@ -29,11 +29,12 @@ function save_Projection(P::Projection, G::JLD2.Group)
     G["nPCA"] = P.spec.nPCA
     G["ndummy"] = P.spec.ndummy
     G["dummydims"] = collect(P.spec.dummydims)
+    G["sparsedims"] = P.spec.sparsedims
 end
 
 
 function load_Projection(G::JLD2.Group)
-    spec = ProjectionSpec(G["nCCA"], G["nPCA"], G["ndummy"], G["dummydims"])
+    spec = ProjectionSpec(G["nCCA"], G["nPCA"], G["ndummy"], G["dummydims"], G["sparsedims"])
     Projection(G["vectors"], G["values"], spec)
 end
 

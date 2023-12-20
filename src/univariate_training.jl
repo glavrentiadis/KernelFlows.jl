@@ -78,10 +78,10 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     X_full = X
     ζ_full = ζ
 
-    reg = 1e-3
+    reg = 1e-5
 
-    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]; nXlinear) +
-        reg * sum(exp.(logα))
+    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end];
+                      nXlinear) + reg * sum(exp.(logα))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
 
 
@@ -100,7 +100,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
             start_ξ_vals = zeros(nl)
             ss = [s_gridr[k] for k ∈ (j-1)*nl+1:j*nl]
 
-            Threads.@threads for k ∈ 1:nl
+            for k ∈ 1:nl
                 ξ_val = @views sum([ξ(X[s,:], ζ[s], tlogα[k,:]) for s ∈ ss])
                 start_ξ_vals[k] = ξ_val
             end
@@ -112,9 +112,6 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
-    # m = 5 # ndata ÷ n # number of past gradients to average over
-    # avg = zeros(length(logα), m)
-
     # minibatches
     all_s = get_random_partitions(ndata, n, niter)
     all_s = collect(eachrow(all_s))
@@ -125,26 +122,19 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     bb = similar(grad)
     for i ∈ 1:niter
         quiet || ((i % 100 == 0) && println("Training round $i/$niter"))
-        # (i % 100 == 0) && display(logα')
         s = all_s[i]
 
         push!(flowres.α_values, exp.(logα))
         flowres.ρ_values[i] = @views ξ(X[s,:], ζ[s], logα)[1]
         grad .= @views ∇ξ(X[s,:], ζ[s], logα)[1]
         g .= grad == nothing ? zero(logα) : grad
-
         # g[isnan.(g)] .= 0 # does not really get triggered.
+
         # Gradient norm, avoid NaN's if zero grad
-        gn(g) = sqrt.(sum(g.^2)) + 1e-9
-
+        gn(g) = sqrt(sum(g.^2)) + 1e-9
         gradnorm = gn(g)
-        b .= ϵ * g / gradnorm # cap this timestep's gradient at ϵ
+        b .= ϵ * g  / gradnorm
         logα .-= b
-
-        # b .= sign.(b) .* max.(0.01*ϵ, abs.(b)) # move all params by at least 0.01*ϵ
-        # avg[:, i%m + 1] .= g
-        # bb .= @views sum(avg, dims = 2)[:] # average contribution (unscaled)
-        # (niter > m) && (logα .-= bb ./ gn(bb) .* ϵ)
     end
 
     flowres

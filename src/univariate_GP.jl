@@ -55,15 +55,16 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
     ntr, nλ = size(ZX_tr)
 
     h = zeros(ntr)
-    λ == nothing && (λ = 1e0 .* ones(nλ))
+    λ == nothing && (λ = 1e-2 .* ones(nλ))
     θ == nothing && (θ = exp.([0., 0., -4., -7.]))
-    # θ == nothing && (θ = exp.([0., 0., 0., 0.]))
 
     @assert length(λ) == nλ "Invalid λ length"
     nθ = length(θ)
     @assert nθ == 4 "Invalid θ length"
 
-    return GPModel(ζ, h, ZX_tr, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[])
+    Z = ZX_tr .* λ'
+
+    return GPModel(ζ, h, Z, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[])
 end
 
 
@@ -81,8 +82,8 @@ function update_GPModel!(M::GPModel{T};
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
-        newλ[newλ .< -20.] .= -20.
-        newλ[newλ .> 20.] .= 20.
+        newλ[newλ .< 1e-9] .= 1e-9
+        newλ[newλ .> 1e2] .= 1e2
         l = newλ ./ M.λ
         M.Z .*= l'
         M.λ .= newλ
@@ -104,4 +105,21 @@ function update_GPModel!(M::GPModel{T};
     end
 
     M
+end
+
+
+function sparsify_inputs(M::GPModel{T}, nleave::Int, max_nXlinear::Int) where T <: Real
+    ζ = M.ζ[:]
+    h = similar(M.h)
+    newdims = sort(sortperm(M.λ, rev = true)[1:nleave])
+    Z = M.Z[:, newdims]
+    λ = M.λ[newdims]
+    θ = M.θ[:]
+
+    nXlinear = sum(newdims .< max_nXlinear)
+
+    M = GPModel(ζ, h, Z, λ, θ, M.kernel, M.zytransf, M.zyinvtransf, T[], Vector{T}[], Vector{T}[])
+
+    update_GPModel!(M; nXlinear)
+    return M, newdims
 end
