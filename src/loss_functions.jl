@@ -147,7 +147,7 @@ function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Func
     vartot = 0.0
 
     # Predict this many points closest to the center, or everything
-    s = sortperm(sum(Ω, dims = 2)[:], rev=true)
+    s = sortperm(sum(Ω, dims = 2)[:], rev = true)
     # Unlike with ρ_RMSE, one should not leave too many points out
     # here. Otherwise the standard deviations go wrong.
     M = predictonlycenter ? 95 * n ÷ 100 : n

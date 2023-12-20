@@ -34,8 +34,8 @@ function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::
     pairwise!(s, buf1, X, dims = 1)
     buf1 .= k.(buf1, θ[1], θ[2])
 
-    buf1[diagind(buf1)] .+= max(exp(-15.), θ[end])
-    lf = θ[end-1] # linear kernel component weight
+    buf1[diagind(buf1)] .+= max(exp(-15.), θ[4])
+    lf = θ[3] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
     @views BLAS.gemm!('N', 'T', lf, X[:,1:nXlinear], X[:,1:nXlinear], 1., buf1)
@@ -74,7 +74,7 @@ function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector;
     KK = @views X[:,1:nXlinear] * X[:,1:nXlinear]'
     H1 = pairwise_Euclidean(X)
     H2 = k.(H1, exp(logθ[1]), exp(logθ[2])) +
-      Diagonal(exp(max(logθ[end], -15.)) * ones(size(X)[1])) + exp(logθ[end-1]) * KK
+        Diagonal(exp(max(logθ[4], -15.)) * ones(size(X)[1])) + exp(logθ[3]) * KK
 
     H2
 end
