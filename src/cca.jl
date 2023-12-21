@@ -43,8 +43,8 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs 
 
     # No need to compute Y vectors to get 1-d subspace of 1-d space
     if size(Y)[2] > 1
-        F_Y = fasteigs(R_Y, nvecs; force_real = true)
         R_Y = CyyI * Cxy * CxxI * Cxy'
+        F_Y = fasteigs(R_Y, nvecs; force_real = true)
     else
         F_Y = nothing
     end

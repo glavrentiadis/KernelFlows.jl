@@ -38,7 +38,8 @@ function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::
     lf = θ[3] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
-    @views BLAS.gemm!('N', 'T', lf, X[:,1:nXlinear], X[:,1:nXlinear], 1., buf1)
+    XX = @views X[:,1:nXlinear]
+    BLAS.gemm!('N', 'T', lf, XX, XX, 1., buf1)
 
     if precision
         L = cholesky!(buf1)
