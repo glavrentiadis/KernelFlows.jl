@@ -111,7 +111,7 @@ end
 function sparsify_inputs(M::GPModel{T}, nleave::Int, max_nXlinear::Int) where T <: Real
     ζ = M.ζ[:]
     h = similar(M.h)
-    newdims = sort(sortperm(M.λ, rev = true)[1:nleave])
+    newdims = sort(sortperm(var(M.Z, dims = 1)[:], rev = true)[1:nleave])
     Z = M.Z[:, newdims]
     λ = M.λ[newdims]
     θ = M.θ[:]
