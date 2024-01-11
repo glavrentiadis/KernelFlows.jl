@@ -32,3 +32,27 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
     return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred
 end
+
+
+"""Remove points outside the training data (along any input
+axis). This is useful if e.g. in a random testing data batch there are
+data that end up outside the training data domain."""
+function remove_extrapolations(MVM::MVGPModel{T}, X::Matrix{T}) where T <: Real
+
+    m = X[:,1] .> Inf # don't remove anything yet
+    nte = length(m)
+    for (i,M) in enumerate(MVM.Ms)
+
+        ZX = reduce_X(X, MVM, i)
+        for j in 1:MVM.G.Xprojs[i].spec.nCCA
+            a,b = extrema(MVM.Ms[i].Z[:,j])
+            z = @views ZX[:,j]
+            m .= m .|| (z .< a) .|| (z .> b)
+        end
+    end
+
+    s_te = setdiff(1:nte, collect(1:nte)[m])
+    X[s_te,:], s_te
+end
+
+

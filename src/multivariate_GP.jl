@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export MVGPModel, update_MVGPModel!, trim_MVGP_data
+export MVGPModel, update_MVGPModel!, trim_MVGP_data, remove_extrapolations
 
 
 """Multivariate GP for multivariate input - multivariate output relations"""

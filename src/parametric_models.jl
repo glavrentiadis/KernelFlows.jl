@@ -18,7 +18,7 @@ export train!
 export predict!
 export MVGPModel_twolevel
 export polycorrect_mf
-export quantileplot, matrixplot_preds, matrixplot_predictions, plot_error_contribs
+export quantileplot!, plot_training, matrixplot_preds, plot_error_contribs, plot_11
 
 
 using Zygote
