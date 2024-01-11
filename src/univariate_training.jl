@@ -78,7 +78,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     X_full = X
     ζ_full = ζ
 
-    reg = 1e-5
+    reg = nXdims * 1e-7
 
     ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end];
                       nXlinear) + reg * sum(exp.(logα))
