@@ -30,9 +30,8 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
     end
 
     Threads.@threads :static for k ∈ ζcomps
-        nXlinear = nXl(MVM, k)
         train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
-               skip_K_update, quiet, nXlinear)
+               skip_K_update, quiet)
     end
 
     if !quiet

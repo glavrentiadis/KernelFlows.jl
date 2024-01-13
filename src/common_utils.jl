@@ -27,60 +27,6 @@ runningmedian(x, n) = [median(x[i:i+n]) for i ∈ 1:length(x)-n]
 RMSE(Y_true, Y_pred) = sqrt(sum((Y_true - Y_pred).^2)/size(Y_pred)[1])
 
 
-"""Compute kernel matrix K, or if precision == true, its inverse."""
-function kernel_matrix_fast(X::AbstractArray{T}, buf1::AbstractMatrix{T}, buf2::AbstractMatrix{T}, k::Function, θ::AbstractVector{T}; precision = true, nXlinear::Int = 1) where T <: Real
-    s = Euclidean()
-
-    pairwise!(s, buf1, X, dims = 1)
-    buf1 .= k.(buf1, θ[1], θ[2])
-
-    buf1[diagind(buf1)] .+= max(exp(-15.), θ[4])
-    lf = θ[3] # linear kernel component weight
-
-    # Linear component only sees first nXlinear dimensions of X
-    XX = @views X[:,1:nXlinear]
-    BLAS.gemm!('N', 'T', lf, XX, XX, 1., buf1)
-
-    if precision
-        L = cholesky!(buf1)
-        ldiv!(buf2, L, UniformScaling(1.)(size(X)[1]))
-    else
-        buf2 .= Symmetric(buf1)
-    end
-
-    buf2
-end
-
-
-function sqr(x::T) where T <: Real
-    # iszero(x) ? zero(T) : sqrt(x)
-    sqrt(x+1e-15)
-end
-
-
-"""A Distances.pairwise() workalike, but works with Zygote"""
-function pairwise_Euclidean(X::AbstractMatrix{T}) where T <: Real
-    H = -2. * X * X'
-    D = .5 * diag(H)
-    sqr.(Symmetric(H .- D .- D'))
-end
-
-
-"""Compute kernel matrix; no inversion. This function is
-   autodifferentiable with Zygote."""
-function kernel_matrix(X::AbstractArray{T}, k::Function, logθ::AbstractVector;
-                       nXlinear::Int = 1) where T <: Real
-
-    # Linear component only for first X dimension
-    KK = @views X[:,1:nXlinear] * X[:,1:nXlinear]'
-    H1 = pairwise_Euclidean(X)
-    H2 = k.(H1, exp(logθ[1]), exp(logθ[2])) +
-        Diagonal(exp(max(logθ[4], -15.)) * ones(size(X)[1])) + exp(logθ[3]) * KK
-
-    H2
-end
-
-
 "Splits integer range to as equal portions as possible, with number of
 points given by nodes. Start and stop are always included."
 function splitrange(start::Int, stop::Int, nodes::Int)

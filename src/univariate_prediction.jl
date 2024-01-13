@@ -39,17 +39,47 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     # Allocate if buffers not given
     (workbuf == nothing) && (workbuf = zeros(size(X)[1], length(M.h)))
     (outbuf == nothing) && (outbuf = zeros(size(X)[1]))
-    s = Euclidean()
 
-    # This is a cheap way to compute distances
-    pairwise!(s, workbuf, X, M.Z, dims = 1)
-    workbuf .= M.kernel.(workbuf, M.θ[1], M.θ[2])
-    # mul! won't accept AbstractArrays, but gemm! does not mind
-    BLAS.gemm!('N', 'T', M.θ[3], (@view X[:,1:nXlinear]),
-               (@view M.Z[:,1:nXlinear]), one(T), workbuf)
+    cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf)
     mul!(outbuf, workbuf, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
 
     outbuf
+end
+
+
+"""Compute cross-covariance matrix between X1 and X2. Typically this
+would be between test inputs X (X1) and training data in GPModel.Z
+(X2). The covariance matrix is computed in-place in workbuf."""
+function cross_covariance_matrix!(k::UnaryKernel, θ::AbstractVector{T},
+                                  X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                                  workbuf::Matrix{T}) where T <: Real
+
+    s = Euclidean()
+
+    # This is a cheap way to compute distances
+    pairwise!(s, workbuf, X1, X2, dims = 1)
+    workbuf .= k.k.(workbuf, θ[1], θ[2])
+
+    # mul! won't accept AbstractArrays, but gemm! does not mind
+    @views BLAS.gemm!('N', 'T', θ[3], X1[:,1:k.nXlinear],
+                      X2[:,1:k.nXlinear], one(T), workbuf)
+end
+
+
+function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
+                                  X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                                  workbuf::Matrix{T}) where T <: Real
+
+    (n,m) = size(workbuf)
+    @inbounds for i in 1:n
+        @inbounds for j in 1:m
+            workbuf[i,j] = @views k.k(X1[i,:], X2[j,:], θ)
+        end
+    end
+
+
+
+
 end

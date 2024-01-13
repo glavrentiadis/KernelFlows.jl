@@ -22,6 +22,7 @@ module KernelFlows
 # dependencies. The motivation for the code structure is to make it
 # easy to separate these files into their own modules / packages.
 include("kernel_functions.jl")
+include("kernel_matrices.jl")
 include("loss_functions.jl")
 
 include("standard_transformations.jl")

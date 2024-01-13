@@ -51,7 +51,7 @@ end
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
-                   kernel::Function, # same RBF kernel for all GPModels
+                   kernel::Kernel, # same RBF kernel for all GPModels
                    G::GPGeometry{T}; # input-output mapping geometry
                    Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters for input dimensions
                    Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters, θ in rows

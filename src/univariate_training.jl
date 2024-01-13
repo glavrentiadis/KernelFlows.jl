@@ -35,7 +35,7 @@ end
 
 function train!(M::GPModel{T}, ρ::Function;
                 ϵ::T = .05, niter::Int = 500, n::Int = 48, ngridrounds::Int = 6,
-                navg::Union{Nothing, Int} = nothing, nXlinear::Int = 1,
+                navg::Union{Nothing, Int} = nothing,
                 skip_K_update::Bool = false, quiet::Bool = false) where T <: Real
 
     α₀ = vcat(M.λ, M.θ)
@@ -43,7 +43,7 @@ function train!(M::GPModel{T}, ρ::Function;
 
     Z = M.Z ./ M.λ'
     flowres = flow(Z, M.ζ, ρ, M.kernel, α₀;
-                   ϵ, niter, n, ngridrounds, nXlinear, quiet)
+                   ϵ, niter, n, ngridrounds, quiet)
 
     if niter > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -53,7 +53,7 @@ function train!(M::GPModel{T}, ρ::Function;
         α = vcat(M.λ, M.θ)
     end
 
-    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], nXlinear, skip_K_update)
+    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], skip_K_update)
     append!(M.ρ_values, flowres.ρ_values)
     append!(M.λ_training, [α[1:nλ] for α in flowres.α_values])
     append!(M.θ_training, [α[nλ+1:end] for α in flowres.α_values])
@@ -64,9 +64,9 @@ end
 """Function to do the actual 1-d learning. This does not depend on
 GPModel; that way it is more generally usable."""
 function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
-              kernel::Function, α₀::Vector{T};
+              kernel::Kernel, α₀::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
-              ngridrounds::Int = 6, ϵ = 5e-2, nXlinear::Int = 1,
+              ngridrounds::Int = 6, ϵ = 5e-2,
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235)
@@ -80,8 +80,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     reg = nXdims * 1e-7
 
-    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end];
-                      nXlinear) + reg * sum(exp.(logα))
+    ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]) + reg * sum(exp.(logα))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
 
 

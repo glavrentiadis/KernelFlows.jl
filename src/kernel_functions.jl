@@ -14,7 +14,19 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export spherical_sqexp, spherical_exp, Matern32, Matern52
+export spherical_sqexp, spherical_exp, Matern32, Matern52, get_kernel
+
+abstract type Kernel end
+
+mutable struct UnaryKernel <: Kernel
+    k::Function # kernel function
+    nXlinear::Int
+end
+
+struct BinaryKernel <: Kernel
+    k::Function # kernel function
+end
+
 
 # Parameters: first is always weight of the component, second is the
 # length scale.
@@ -36,3 +48,17 @@ function Matern52(d::T, a::T, b::T) where T <: Real
     a * (1. + h + h^2 / 3.) * exp(-h)
 end
 Matern52(d::T; θ::AbstractVector{T}) where T <: Real = Matern52(d, θ[1], θ[2])
+
+"""Linear kernel for testing BinaryKernel correctness"""
+function binary_test(x1::AbstractVector{T}, x2::AbstractVector{T}, θ::AbstractVector{T}) where T <: Real
+    θ[1] * x1' * x2
+end
+
+
+function get_kernel(s::Symbol)
+    s == :spherical_sqexp && return UnaryKernel(spherical_sqexp, 0)
+    s == :spherical_exp && return UnaryKernel(spherical_exp, 0)
+    s == :Matern32 && return UnaryKernel(Matern32, 0)
+    s == :Matern52 && return UnaryKernel(Matern52, 0)
+    s == :binary_test && return BinaryKernel(binary_test)
+end

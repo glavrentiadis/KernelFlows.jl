@@ -26,8 +26,7 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     ZY_pred = zeros(nte, nzycols)
     Threads.@threads :static for i ∈ Mlist
         Z = reduce_inputs ? reduce_X(X, MVM.G, i) : X
-        nXlinear = nXl(MVM, i)
-        ZY_pred[:,i] .= predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf, nXlinear)
+        ZY_pred[:,i] .= predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf)
     end
 
     return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred

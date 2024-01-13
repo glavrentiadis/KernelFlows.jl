@@ -26,7 +26,7 @@ struct GPModel{T}
     Z::Matrix{T}        # transformed X_tr *after* applying λ-scaling
     λ::Vector{T}        # X_tr scaling factors for each input dimension
     θ::Vector{T}        # kernel parameters for spherical + linear kernel
-    kernel::Function    # kernel function
+    kernel::Kernel      # kernel struct including the kernel function
     zytransf::Function    # nonlinear 1-d output transformations
     zyinvtransf::Function # inverse 1-d output transformations
     ρ_values::Vector{T} # loss function values from latest training
@@ -42,7 +42,7 @@ include("univariate_prediction.jl")
 
 function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
                  zy_tr::Vector{T}, # outputs after reduce()
-                 kernel::Function;
+                 kernel::Kernel;
                  λ::Union{Nothing, Vector{T}} = nothing,
                  θ::Union{Nothing, Vector{T}} = nothing,
                  transform_zy::Bool = false) where T <: Real
@@ -99,8 +99,7 @@ function update_GPModel!(M::GPModel{T};
         (buf1 == nothing) && (buf1 = zeros(ntr, ntr))
         (buf2 == nothing) && (buf2 = zeros(ntr, ntr))
 
-        KI = kernel_matrix_fast(M.Z, buf1, buf2, M.kernel, M.θ;
-                                precision = true, nXlinear)
+        KI = kernel_matrix_fast(M.kernel, M.θ, M.Z, buf1, buf2; precision = true)
         mul!(M.h, KI, M.ζ)
     end
 
