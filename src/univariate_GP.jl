@@ -55,8 +55,10 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
     ntr, nλ = size(ZX_tr)
 
     h = zeros(ntr)
-    λ == nothing && (λ = 1e-2 .* ones(nλ))
-    θ == nothing && (θ = exp.([0., 0., -4., -7.]))
+    # Initialize so, that if ZX_tr were Gaussian, points are on
+    # average 1 std away from each other.
+    λ == nothing && (λ =  sqrt(2) * ones(nλ) ./ nλ)
+    θ == nothing && (θ = kernel.θ_start[:])
 
     @assert length(λ) == nλ "Invalid λ length"
     nθ = length(θ)
