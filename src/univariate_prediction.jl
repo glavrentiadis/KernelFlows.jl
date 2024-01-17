@@ -31,8 +31,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
                  workbuf::Union{Nothing, Matrix{T}} = nothing,
-                 outbuf::Union{Nothing, Matrix{T}} = nothing,
-                 nXlinear::Int = 1) where T <: Real
+                 outbuf::Union{Nothing, Matrix{T}} = nothing) where T <: Real
 
     apply_λ && (X .*= M.λ')
 
@@ -75,7 +74,7 @@ function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
     (n,m) = size(workbuf)
     @inbounds for i in 1:n
         @inbounds for j in 1:m
-            workbuf[i,j] = @views k.k(X1[i,:], X2[j,:], θ)
+            workbuf[i,j] = @views k.k(X1[i,:], X2[j,:], θ[1:end-1])
         end
     end
 

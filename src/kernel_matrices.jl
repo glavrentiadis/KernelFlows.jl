@@ -73,7 +73,7 @@ function kernel_matrix_fast(k::BinaryKernel, θ::AbstractVector{T}, X::AbstractA
 
     @inbounds for i in 1:n
         @inbounds for j in 1:i
-            buf[i,j] = @views k.k(X[i,:], X[j,:], θ)
+            buf[i,j] = @views k.k(X[i,:], X[j,:], θ[1:end-1])
             buf[j,i] = buf[i,j]
         end
     end

@@ -183,7 +183,7 @@ end
 # end
 
 
-# function rebalance_Xy(X::AbstractMatrix{T}, y::AbstractVector{T}, nleave::Int, k::Function, logdimscales::Vector{T}, logkpars::Vector{T}; buf_rebalance::Matrix{T} = nothing, workbuf = nothing) where T <: Real
+# function rebalance_Xy(X::AbstractMatrix{T}, y::AbstractVector{T}, nleave::Int, k::Kernel, logdimscales::Vector{T}, logkpars::Vector{T}; buf_rebalance::Matrix{T} = nothing, workbuf = nothing) where T <: Real
 #     k2(d) = k(d; logθ = logkpars)
 #     @time wb = workbuf == nothing ? similar(X) : workbuf
 #     @time wb .= X .* exp.(logdimscales)'

@@ -60,7 +60,7 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
 
     @assert length(λ) == nλ "Invalid λ length"
     nθ = length(θ)
-    @assert nθ == 4 "Invalid θ length"
+    typeof(kernel) == UnaryKernel && (@assert nθ == 4 "Invalid θ length")
 
     Z = ZX_tr .* λ'
 
@@ -77,7 +77,6 @@ function update_GPModel!(M::GPModel{T};
                          newθ::Union{Nothing, Vector{T}} = nothing,
                          buf1::Union{Nothing, Matrix{T}} = nothing,
                          buf2::Union{Nothing, Matrix{T}} = nothing,
-                         nXlinear::Int = 1,
                          skip_K_update::Bool = false) where T <: Real
 
     # Update M.Z, M.λ, and M.θ, if requested
@@ -107,7 +106,20 @@ function update_GPModel!(M::GPModel{T};
 end
 
 
-function sparsify_inputs(M::GPModel{T}, nleave::Int, max_nXlinear::Int) where T <: Real
+"""Any kernel-specific code that's needed for sparsifying inputs can
+be implemented here. The default function does nothing"""
+function sparsify_inputs_hook(::Kernel, M::GPModel, newdims::Vector{Int}) end
+
+
+"""Update kernel.nXlinear when sparsifying GPModels with UnaryKernel
+kernels."""
+function sparsify_inputs_hook(newkernel::UnaryKernel, M::GPModel, newdims::Vector{Int})
+    max_nXlinear = M.kernel.nXlinear
+    newkernel.nXlinear = sum(newdims .< max_nXlinear)
+end
+
+
+function sparsify_inputs(M::GPModel{T}, nleave::Int) where T <: Real
     ζ = M.ζ[:]
     h = similar(M.h)
     newdims = sort(sortperm(var(M.Z, dims = 1)[:], rev = true)[1:nleave])
@@ -115,10 +127,11 @@ function sparsify_inputs(M::GPModel{T}, nleave::Int, max_nXlinear::Int) where T 
     λ = M.λ[newdims]
     θ = M.θ[:]
 
-    nXlinear = sum(newdims .< max_nXlinear)
+    newkernel = deepcopy(M.kernel)
+    sparsify_inputs_hook(newkernel, M, newdims)
 
-    M = GPModel(ζ, h, Z, λ, θ, M.kernel, M.zytransf, M.zyinvtransf, T[], Vector{T}[], Vector{T}[])
+    M = GPModel(ζ, h, Z, λ, θ, newkernel, M.zytransf, M.zyinvtransf, T[], Vector{T}[], Vector{T}[])
 
-    update_GPModel!(M; nXlinear)
+    update_GPModel!(M)
     return M, newdims
 end

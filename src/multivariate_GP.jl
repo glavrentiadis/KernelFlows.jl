@@ -41,8 +41,7 @@ function update_MVGPModel!(MVM::MVGPModel{T};
         print("\rUpdating GP $i / $(length(MVM.Ms))...")
 
         # Linear kernel only affects CCA dims, but also account for sparsification
-        nXlinear = nXl(MVM, i)
-        update_GPModel!(M; newλ = λs[i], newθ = θs[i], nXlinear)
+        update_GPModel!(M; newλ = λs[i], newθ = θs[i])
     end
     println("done!")
     MVM
@@ -51,7 +50,7 @@ end
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
-                   kernel::Kernel, # same RBF kernel for all GPModels
+                   kernel::Symbol,   # same kernel for all GPModels
                    G::GPGeometry{T}; # input-output mapping geometry
                    Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters for input dimensions
                    Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters, θ in rows
@@ -61,21 +60,15 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
     ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
 
+    kernels = get_MVGP_kernels(kernel, G)
+
     λs = (Λ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Λ))
     θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Ψ))
 
-    Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernel;
+    Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernels[i];
                   λ = λs[i], θ = θs[i], transform_zy) for i ∈ 1:nZYdims]
 
     return MVGPModel(Ms, G)
-end
-
-
-"""Get the standard number of X dimensions for linear kernel"""
-function nXl(MVM::MVGPModel{T}, i::Int) where T <: Real
-    spec = MVM.G.Xprojs[i].spec
-    nXl_max = spec.nCCA == 0 ? spec.ndummy : spec.nCCA
-    sum(spec.sparsedims .<= nXl_max)
 end
 
 
@@ -99,12 +92,20 @@ function trim_MVGP_data(MVM::MVGPModel{T}, s::AbstractVector{Int}) where T <: Re
 end
 
 
+# """Get the standard number of X dimensions for linear kernel"""
+# function nXl(G::GPGeometry{T}, i::Int) where T <: Real
+#     spec = G.Xprojs[i].spec
+#     nXl_max = spec.nCCA == 0 ? spec.ndummy : spec.nCCA
+#     sum(spec.sparsedims .<= nXl_max)
+# end
+
+
 function sparsify_inputs(MVM::MVGPModel{T}, nleave::Int) where T <: Real
     Ms_new = GPModel{T}[]
     G_new = deepcopy(MVM.G)
 
     for (i,M) in enumerate(MVM.Ms)
-        newM, newdims = sparsify_inputs(M, nleave, MVM.G.Xprojs[i].spec.nCCA)
+        newM, newdims = sparsify_inputs(M, nleave)
         push!(Ms_new, newM)
         keepat!(G_new.Xprojs[i].spec.sparsedims, newdims)
     end
