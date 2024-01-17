@@ -19,21 +19,21 @@ using Arpack
 
 
 """Carries out CCA for input-output pair X,Y"""
-function CCA(X::Matrix{T}, Y::Matrix{T}; reg = 1e-2, maxdata::Int = 3000, nvecs = 50) where T <: Real
+function CCA(X::Matrix{T}, Y::Matrix{T}; reg_Y::T = 1e-2, reg_X::T = reg_Y, maxdata::Int = 3000, nvecs = 50) where T <: Real
 
-    ndata = min(maxdata, size(X)[1])
+    ndata = min(maxdata, size(X)[1]) # Use max ndata data points
     ndx = size(X)[2]
 
     s = randperm(size(X)[1])[1:ndata]
-    H = @views hcat(X[s,:], Y[s,:]) #  ./ Ystd) # Use max ndata data points
+    H = @views hcat(X[s,:], Y[s,:])
     C = cov(H)
 
     Cxx = @view C[1:ndx,1:ndx]
     Cxy = @view C[ndx+1:end,1:ndx]
     Cyy = @view C[ndx+1:end,ndx+1:end]
 
-    Cxx[diagind(Cxx)] .+= reg
-    Cyy[diagind(Cyy)] .+= reg
+    Cxx[diagind(Cxx)] .+= reg_X
+    Cyy[diagind(Cyy)] .+= reg_Y
 
     CxxI = inv(Cxx)
     CyyI = inv(Cyy)
@@ -57,7 +57,7 @@ end
 along the removed direction"""
 function remove_direction(X::Matrix{T}, v::Vector{T}) where T <: Real
     v ./= sqrt(sum(v.^2)) # normalize v
-    vprojs = sum(X .* v', dims = 2)[:]
+    vprojs = X * v
     return X -  vprojs .* v', vprojs
 end
 

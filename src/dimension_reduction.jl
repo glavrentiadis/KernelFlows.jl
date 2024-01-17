@@ -62,11 +62,14 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    Xtransf_deg::Int = 0, Xtransf_ϵ::T = 1e-2,
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
-                   reg_CCA::T = 1e-2, maxdata::Int = 3000,
-                   scale_Y::Bool = true) where T <: Real
+                   reg_CCA::T = 1e-2, reg_CCA_X::T = reg_CCA,
+                   maxdata::Int = 3000, scale_Y::Bool = true) where T <: Real
 
-    (X, Xtransf_spec) = Xtransf_deg == 0 ? (X, nothing) :
-        standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
+    if Xtransf_deg > 0
+        X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
+    else
+        Xtransf_spec = nothing
+    end
 
     (dummyXdims == false) && (dummyXdims = 1:0)
     (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
@@ -100,6 +103,8 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     X .= (X .- μX') ./ σX'
     Y .= (Y .- μY') ./ σY'
 
+    Y_unreduced = Y[:,:]
+
     # Allocate Projection objects for inputs
     Xprojs = Vector{Projection{T}}()
     for i in 1:nY
@@ -113,7 +118,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     Yproj = Projection(zeros(size(Y)[2], nY), zeros(nY), YSpec)
 
     for i in 1:nYCCA
-        FX, FY = CCA(X, Y; reg = reg_CCA, nvecs = 1)
+        FX, FY = CCA(X, Y; reg_Y = reg_CCA, reg_X = reg_CCA_X, nvecs = 1)
 
         # Orthogonalize Y-vector
         yvec = GramSchmidt(FY.vectors[:,1], Yproj.vectors[:,1:i-1])
@@ -122,9 +127,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
         Y, vYprojs = remove_direction(Y, yvec)
 
         # Save relevant quantities
-        Xprojs[i].vectors[:,1] = FX.vectors[:,1]
-        Yproj.vectors[:,i] = yvec
-        Xprojs[i].values[1] = FX.values[1]
+        Yproj.vectors[:,i] .= yvec
         Yproj.values[i] = std(vYprojs)
     end
 
@@ -143,8 +146,8 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
 
     # Fill the rest of CCA X-dimensions and dummy X dimensions for all Y-vectors
     for i in 1:nY
-        yproj_i = Y * Yproj.vectors[:,i]
-        get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA,
+        yproj_i = Y_unreduced * Yproj.vectors[:,i]
+        get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA_X, reg_CCA_X,
                            X_basis = Xprojs[i].vectors, X_values = Xprojs[i].values)
 
         dummyvecs, dummyvals = get_dummy_vectors(X; dummydims = dummyXdims)
@@ -163,9 +166,11 @@ in the X_basis and X_values optional arguments. Note, that in that
 case the dimensions of these arrays should still be at least
 (size(X)[2], nXCCA) and (nXCCA,)."""
 function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
-                            nXCCA::Int = 1, reg_CCA::T = 1e-2,
+                            nXCCA::Int = 1, reg_CCA::T = 1e-2, reg_CCA_X::T = reg_CCA,
                             X_basis::AbstractMatrix{T} = zeros(T, size(X)[2], nXCCA),
                             X_values::AbstractVector{T} = zeros(T, nXCCA)) where T <: Real
+
+    vXprojs = zeros(size(X)[1], nXCCA)
 
     for i in 1:nXCCA
 
@@ -174,24 +179,64 @@ function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
             # from non-zero singular values. In order to not produce
             # the same vectors twice, we remove the corresponding
             # directions from data.
-            X, vXprojs = remove_direction(X, X_basis[:,i])
+            X, vXprojs[:,i] = remove_direction(X, X_basis[:,i])
             continue
         end
 
         F_X, _ = CCA(X, reshape(yproj, (length(yproj),1));
-                     reg = reg_CCA, nvecs = 1)
+                     reg_Y = reg_CCA, reg_X = reg_CCA_X, nvecs = 1)
 
-        # Apparently because of regularization the CCA vectors may end
-        # up being non-orthogonal. For this reason we force it to be
-        # orthogonal by doing Gram-Schmidt with earlier vectors
+        X_basis[:,i] .= F_X.vectors[:,1]
 
-        X_basis[:,i] .= GramSchmidt(F_X.vectors[:,1], X_basis[:,1:i-1])
+        # Make the X basis vectors such that projections of inputs on
+        # the dimensions are not similar
 
-        for ii ∈ 1:i
-            X, vXprojs = remove_direction(X, X_basis[:,ii])
+        # Recursive version
+        normalize(x) = x ./ sqrt(x' * x)
+        if i > 1
+            p2 = X * X_basis[:,i]
+            p2_no = normalize(p2)
+            p2mod =  p2[:]
+
+            for ii in 1:i-1
+                p1 = @view vXprojs[:,ii]
+                p1_no = normalize(p1)
+                p2mod .-= (p1_no' * p2_no) * p1
+            end
+            X_basis[:,i] .= normalize(inv(X' * X) * X' * p2mod)
         end
 
-        X_values[i] = std(vXprojs)
+        # Just handle the previous dim
+        # normalize(x) = x ./ sqrt(x' * x)
+        # if i > 1
+        #     p1 = @view vXprojs[:,i-1]
+        #     p1_no = normalize(p1)
+        #     p2 = X * X_basis[:,i]
+        #     p2_no = normalize(p2)
+        #     p2mod = p2 - (p1_no' * p2_no) * p1
+        #     X_basis[:,i] .= normalize(inv(X' * X) * X' * p2mod)
+        # end
+
+        # Apparently because of regularization, and because of the
+        # recursion aboce, the CCA vectors may end up being
+        # non-orthogonal. For this reason we force it to be orthogonal
+        # by doing Gram-Schmidt with earlier vectors
+        X_basis[:,i] .= GramSchmidt(X_basis[:,i], X_basis[:,1:i-1])
+
+        # Update X to be orthogonal to all basis vectors up to now
+        for ii in 1:i
+            X, vXprojs[:,i] = remove_direction(X, X_basis[:,ii])
+        end
+
+        # Remove from yprojs linear regression results of previous X
+        # CCA vectors, to make next X CCA vectors independently
+        # informative for predicting the current Y vector.
+        vXp = vXprojs[:,i]
+        A = hcat(ones(length(vXp)), vXp)
+        β = inv(A' * A) * A' * yproj
+        yproj_regr_pred = β[2] * vXp .+ β[1]
+        yproj .-= yproj_regr_pred
+        X_values[i] = std(vXp)
     end
 end
 
