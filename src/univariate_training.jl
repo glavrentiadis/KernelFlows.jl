@@ -78,7 +78,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     X_full = X
     ζ_full = ζ
 
-    reg = nXdims * 1e-7
+    reg = 1e-7
 
     ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]) + reg * sum(exp.(logα))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)
@@ -120,7 +120,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     b = similar(grad)
     bb = similar(grad)
     for i ∈ 1:niter
-        quiet || ((i % 100 == 0) && println("Training round $i/$niter"))
+        quiet || ((i % 500 == 0) && println("Training round $i/$niter"))
         s = all_s[i]
 
         push!(flowres.α_values, exp.(logα))
@@ -134,6 +134,12 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
         gradnorm = gn(g)
         b .= ϵ * g  / gradnorm
         logα .-= b
+
+        # Uncomment to allow inertia.
+        # if i > 2*20
+        #     logα .+= (logα - log.(flowres.α_values[end-20]))/20/2
+        # end
+
     end
 
     flowres
