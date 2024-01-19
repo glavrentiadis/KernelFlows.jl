@@ -37,11 +37,17 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΛ))
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
-    Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))
-        print("\rUpdating GP $i / $(length(MVM.Ms))...")
-
-        # Linear kernel only affects CCA dims, but also account for sparsification
-        update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+    parallel = length(MVM.Ms[1].ζ) < 5001
+    if parallel
+        print("\rUpdating all $(length(MVM.Ms)) GPs in parallel...")
+        Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))
+            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+        end
+    else
+        print("\rUpdating all $(length(MVM.Ms)) GPs...")
+        for (i,M) ∈ collect(enumerate(MVM.Ms))
+            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+        end
     end
     println("done!")
     MVM

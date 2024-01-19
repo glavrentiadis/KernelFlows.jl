@@ -31,7 +31,7 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
 
     Threads.@threads :static for k ∈ ζcomps
         train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
-               skip_K_update, quiet)
+               skip_K_update = true, quiet)
     end
 
     if !quiet
