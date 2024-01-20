@@ -192,19 +192,19 @@ function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
         # the dimensions are not similar
 
         # Recursive version
-        normalize(x) = x ./ sqrt(x' * x)
-        if i > 1
-            p2 = X * X_basis[:,i]
-            p2_no = normalize(p2)
-            p2mod =  p2[:]
+        # normalize(x) = x ./ sqrt(x' * x)
+        # if i > 1
+        #     p2 = X * X_basis[:,i]
+        #     p2_no = normalize(p2)
+        #     p2mod =  p2[:]
 
-            for ii in 1:i-1
-                p1 = @view vXprojs[:,ii]
-                p1_no = normalize(p1)
-                p2mod .-= (p1_no' * p2_no) * p1
-            end
-            X_basis[:,i] .= normalize(inv(X' * X) * X' * p2mod)
-        end
+        #     for ii in 1:i-1
+        #         p1 = @view vXprojs[:,ii]
+        #         p1_no = normalize(p1)
+        #         p2mod .-= (p1_no' * p2_no) * p1
+        #     end
+        #     X_basis[:,i] .= normalize(inv(X' * X) * X' * p2mod)
+        # end
 
         # Just handle the previous dim
         # normalize(x) = x ./ sqrt(x' * x)
@@ -231,19 +231,29 @@ function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
         # Remove from yprojs linear regression results of previous X
         # CCA vectors, to make next X CCA vectors independently
         # informative for predicting the current Y vector.
-        vXp = vXprojs[:,i]
-        A = hcat(ones(length(vXp)), vXp)
-        β = inv(A' * A) * A' * yproj
-        yproj_regr_pred = β[2] * vXp .+ β[1]
-        yproj .-= yproj_regr_pred
-        X_values[i] = std(vXp)
+        # vXp = vXprojs[:,i]
+        # A = hcat(ones(length(vXp)), vXp)
+        # β = inv(A' * A) * A' * yproj
+        # yproj_regr_pred = β[2] * vXp .+ β[1]
+        # yproj .-= yproj_regr_pred
+        # X_values[i] = std(vXp)
+        X_values[i] = std(vXprojs[:,i])
     end
 end
 
 
 function get_PCA_vectors(X::AbstractMatrix{T}, nPCA::Int) where T <: Real
-    G = fasteigs(cov(X), nPCA)
-    return (G.vectors, G.values)
+    # Check if we are centered, and if not, center data before SVD
+    @views X = abs(sum(X[:,1])) > 1e-10 ? X .- mean(X, dims = 1) : X
+    (U, S, Vt) = svd(X)
+    (vecs, vals) =  (Vt[:,1:nPCA], S[1:nPCA]  ./ sqrt(size(X)[1]-1.))
+    return (vecs, vals)
+
+    # # Old method
+    # @time F = fasteigs(cov(X), nPCA)
+    # # display(vecs1 ./ F.vectors)
+    # # display(vals1 ./ F.values)
+    # return (vecs1, vals1)
 end
 
 
@@ -291,8 +301,6 @@ end
 function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
     recover(Z, G.Yproj, G.μY,  G.σY)
 end
-
-
 
 
 # Not yet adapted to new dimension reduction code

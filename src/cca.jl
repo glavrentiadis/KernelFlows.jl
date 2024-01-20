@@ -15,7 +15,6 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
-using Arpack
 
 
 """Carries out CCA for input-output pair X,Y"""
@@ -73,28 +72,38 @@ function GramSchmidt(v::Vector{T}, M::Matrix{T}) where T <: Real
 end
 
 
-"""Returns largest nvecs eigenvectors and singular values of square matrix
-C in a NamedTuple. Uses Arpack if matrix is large since eigen is then
-slow."""
+"""Returns largest nvecs eigenvectors and singular values of square
+(covariance) matrix C in a NamedTuple."""
 function fasteigs(C::Matrix{T}, nvecs::Int; force_real::Bool = false) where T <: Real
 
     d = size(C)[1] # dimension of C
     nvecs = min(nvecs, d)
 
+    (U, S, Vt) = svd(C)
+    FF = (vectors = U[:,1:nvecs], values = S[1:nvecs])
+    return FF
+
+    # Old version below, kept for reference.
     # More accurate, but slow for very large dimension
-    if (d < 500) || (d - nvecs < 2)
-        G = eigen(C)
-        F = (vectors = G.vectors[:,end:-1:end-nvecs+1],
-             values = sqrt.(G.values[end:-1:end-nvecs+1]))
-    # Faster for large dimension
-    else
-        G = Arpack.eigs(C, nev = nvecs)
-        F = (vectors = G[2], values = sqrt.(G[1]))
-    end
+    # if (d < 500) || (d - nvecs < 2)
+    #     G = eigen(C)
+    #     F = (vectors = G.vectors[:,end:-1:end-nvecs+1],
+    #          values = sqrt.(G.values[end:-1:end-nvecs+1]))
+    # # Faster for large dimension
+    # else
+    #     G = Arpack.eigs(C, nev = nvecs)
+    #     F = (vectors = G[2], values = sqrt.(G[1]))
+    # end
 
-    if force_real
-        return (vectors = real.(F.vectors), values = real.(F.values))
-    end
+    # # display(FF.vectors' ./ F.vectors')
+    # # println(FF.values[1] / F.values[1])
+    # # println(F.values[1])
+    # # println(size(C))
+    # # display(FF.values' ./ F.values')
 
-    F
+    # if force_real
+    #     return (vectors = real.(F.vectors), values = real.(F.values))
+    # end
+
+    # F
 end
