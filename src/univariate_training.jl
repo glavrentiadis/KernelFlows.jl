@@ -131,14 +131,18 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
         # Gradient norm, avoid NaN's if zero grad
         gn(g) = sqrt(sum(g.^2)) + 1e-9
-        gradnorm = gn(g)
-        b .= ϵ * g  / gradnorm
-        logα .-= b
+
+        # gradnorm = gn(g)
+        # b .= ϵ * g  / gradnorm
 
         # Uncomment to allow inertia.
-        # if i > 2*20
-        #     logα .+= (logα - log.(flowres.α_values[end-20]))/20/2
-        # end
+        b .= ϵ * g
+        logα .-= b
+        if i > 2*20
+            Δ = (logα - log.(flowres.α_values[end-20]))/20/2
+            logα .+= Δ
+        end
+
 
     end
 
