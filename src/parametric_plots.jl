@@ -15,12 +15,15 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
+using Plots
+using Makie
+
 function quantileplot!(p::Plots.Subplot, Y_te::AbstractMatrix{T}, Y_te_pred::AbstractMatrix{T};
                        x::AbstractArray = 1:size(Y_te)[2], μ = zeros(T, size(Y_te)[2])) where T <: Real
     Y_res = Y_te - Y_te_pred
-    qs = [.005, .025, .05, .25, .5, .75, .975, .995]
-    colors = ["gray", "green", "blue", "red", "blue", "green", "gray"]
-    labels = [nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
+    qs = [.005, .025, .05, .25, .5, .75, .95, .975, .995]
+    colors = ["gray", "green", "blue", "red", "red", "blue", "green", "gray"]
+    labels = [nothing, nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
     quantiles = hcat([quantile(y, qs) for y ∈ eachcol(Y_res)]...) .+ μ'
 
     for (i,c) ∈ enumerate(colors)
@@ -32,6 +35,19 @@ function quantileplot!(p::Plots.Subplot, Y_te::AbstractMatrix{T}, Y_te_pred::Abs
     p
 end
 
+function quantileplot!(ax::Makie.Axis, Y_te::AbstractMatrix{T}, Y_te_pred::AbstractMatrix{T};
+                       x::AbstractVector = 1:size(Y_te)[2], μ = zeros(T, size(Y_te)[2])) where T <: Real
+    Y_res = Y_te - Y_te_pred
+    qs = [.005, .025, .05, .25, .5, .75, .95, .975, .995]
+    colors = ["gray", "green", "blue", "red", "red", "blue", "green", "gray"]
+    labels = [nothing, nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
+    quantiles = hcat([quantile(y, qs) for y ∈ eachcol(Y_res)]...) .+ μ'
+    for (i,c) ∈ enumerate(colors)
+        lines!(ax, x, quantiles[i,:], color=c)
+        band!(ax, x, quantiles[i,:], quantiles[i+1,:], color=c, alpha=.2, label = labels[i])
+    end
+    Makie.xlims!(ax, extrema(x))
+end
 
 function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
 
