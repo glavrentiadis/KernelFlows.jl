@@ -54,6 +54,13 @@ function kernel_matrix_fast(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractAr
     BLAS.gemm!('N', 'T', lf, XX, XX, 1., buf)
 
     if precision
+        # Symmetrize: MKL gives 1e-17 rounding errors -> not PD
+        for i in 1:size(X)[1]
+            for j in 1:i-1
+                buf[i,j] = buf[j,i]
+            end
+        end
+
         L = cholesky!(buf)
         ldiv!(outbuf, L, UniformScaling(1.)(size(X)[1]))
     else
