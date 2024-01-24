@@ -69,10 +69,15 @@ end
 
 """Transform data and construct TransfSpec"""
 function standard_transformations(X::AbstractMatrix{T}; deg = 2, ϵ = 1e-2) where T <: Real
-    μ = mean(X, dims=1)[:]
-    σ = std(X, dims=1)[:]
-    minim = minimum(X, dims=1)[:]
-    spec = TransfSpec(μ, σ, minim, ϵ, deg)
+
+    if deg == 0
+        spec = TransfSpec(T[], T[], T[], zero(T), 0)
+    else
+        μ = mean(X, dims=1)[:]
+        σ = std(X, dims=1)[:]
+        minim = minimum(X, dims=1)[:]
+        spec = TransfSpec(μ, σ, minim, ϵ, deg)
+    end
 
     return standard_transformations(X, spec), spec
 end
@@ -80,6 +85,8 @@ end
 
 """Transform inputs using a pre-computed TransfSpec"""
 function standard_transformations(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
+    spec.deg == 0 && (return X)
+
     h = posscale(X, spec)
     h[h .< 1e-12] .= 1e-12 # must ensure positivity
     Z = hcat(meanscale(X, spec), sqrt.(h), log.(h), cosd.(X), sind.(X))
