@@ -39,6 +39,29 @@ function load_Projection(G::JLD2.Group)
 end
 
 
+function save_kernel(U::UnaryKernel, G::JLD2.Group)
+    G["k"] = string(U.k)
+    G["nXlinear"] = U.nXlinear
+    G["theta_start"] = U.θ_start
+end
+
+
+"""Load UnaryKernel kernel from a JLD2.Group. Other types of kernels
+need other implementations, choosing between which then needs to be
+handled in load_GPModel()"""
+function load_kernel(G::JLD2.Group)
+    kerneltable = Dict("Matern32" => Matern32,
+                       "Matern52" => Matern52,
+                       "spherical_exp" => spherical_exp,
+                       "spherical_sqexp" => spherical_sqexp)
+
+    k = kerneltable[G["k"]]
+    nXlinear = G["nXlinear"]
+    θ_start = G["theta_start"]
+    UnaryKernel(k, θ_start, nXlinear)
+end
+
+
 """Saves a GPModel as a group in a JLD2 file"""
 function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["zeta"] = M.ζ
@@ -49,24 +72,19 @@ function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["rho_values"] = M.ρ_values
     G["lambda_training"] = hcat(M.λ_training...)
     G["theta_training"] = hcat(M.θ_training...)
-    G["kernel"] = string(M.kernel)
+    g = JLD2.Group(G, "kernel")
+    save_kernel(M.kernel, G["kernel"])
 end
 
 
 function load_GPModel(G::JLD2.Group)
-
-    kerneltable = Dict("Matern32" => Matern32,
-                       "Matern52" => Matern52,
-                       "spherical_exp" => spherical_exp,
-                       "spherical_sqexp" => spherical_sqexp)
-
     ζ = G["zeta"]
     h = G["h"]
     Z = G["Z"]
     λ = G["lambda"]
     θ = G["theta"]
     ρ_values = G["rho_values"]
-    kernel = kerneltable[G["kernel"]]
+    kernel = load_kernel(G["kernel"])
     λ_training = [c[:] for c in collect(eachcol(G["lambda_training"]))]
     θ_training = [c[:] for c in eachcol(G["theta_training"])]
 
