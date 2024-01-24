@@ -74,6 +74,27 @@ function load_GPModel(G::JLD2.Group)
 end
 
 
+function save_TransfSpec(spec::TransfSpec{T}, G::JLD2.Group) where T <: Real
+    G["mean"] = spec.μ
+    G["std"] = spec.σ
+    G["minim"] = spec.minim
+    G["epsilon"] = spec.ϵ
+    G["deg"] = spec.deg
+end
+
+
+function load_TransfSpec(G::JLD2.Group)
+    μ = G["mean"]
+    σ = G["std"]
+    minim = G["minim"]
+    ϵ = G["epsilon"]
+    deg = G["deg"]
+
+    TransfSpec(μ, σ, minim, ϵ, deg)
+end
+
+
+
 function save_GPGeometry(geom::GPGeometry{T}, G::JLD2.Group) where T <: Real
 
     for (i,Xp) in enumerate(geom.Xprojs)
@@ -83,6 +104,9 @@ function save_GPGeometry(geom::GPGeometry{T}, G::JLD2.Group) where T <: Real
 
     g = JLD2.Group(G, "Yproj")
     save_Projection(geom.Yproj, g)
+
+    g = JLD2.Group(G, "Xtransfspec")
+    save_TransfSpec(geom.Xtransfspec, g)
 
     G["Xmean"] = geom.μX
     G["Xstd"] = geom.σX
@@ -103,12 +127,13 @@ function load_GPGeometry(G::JLD2.Group)
     reg_CCA = G["reg_CCA"]
     Yproj = load_Projection(G["Yproj"])
     Xprojs = Vector{Projection{eltype(Yproj.values)}}()
+    Xtransfspec = load_TransfSpec(G["Xtransfspec"])
 
     for i in 1:length(Yproj.values)
         push!(Xprojs, load_Projection(G["Xproj" * string(i)]))
     end
 
-    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA)
+    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA, Xtransfspec)
 end
 
 

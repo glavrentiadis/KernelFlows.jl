@@ -41,7 +41,7 @@ struct GPGeometry{T}
     μY::Vector{T} # output (Y) mean
     σY::Vector{T} # output standard deviation
     reg_CCA::T # CCA regular
-    Xtransfspec::Union{Nothing, TransfSpec{T}} # non-linear transformations
+    Xtransfspec::TransfSpec{T} # non-linear input transformations
 end
 
 
@@ -65,11 +65,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    reg_CCA::T = 1e-2, reg_CCA_X::T = reg_CCA,
                    maxdata::Int = 3000, scale_Y::Bool = true) where T <: Real
 
-    if Xtransf_deg > 0
-        X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
-    else
-        Xtransf_spec = nothing
-    end
+    X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
 
     (dummyXdims == false) && (dummyXdims = 1:0)
     (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
@@ -288,7 +284,7 @@ end
 in GPGeometry object in G. This function does not scale the inputs
 according to learned kernel parameters"""
 function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int) where T <: Real
-    X = G.Xtransfspec == nothing ? X : standard_transformations(X, G.Xtransfspec)
+    X = G.Xtransfspec.deg == 0 ? X : standard_transformations(X, G.Xtransfspec)
     reduce(X, G.Xprojs[i], G.μX,  G.σX)
 end
 
