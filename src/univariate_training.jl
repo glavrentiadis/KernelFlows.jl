@@ -134,16 +134,20 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
         # gradnorm = gn(g)
         # b .= ϵ * g  / gradnorm
-
         # Uncomment to allow inertia.
+
         b .= ϵ * g
+        if gn(b) > .5
+            b .= .5*b/gn(b)
+        end
+
         logα .-= b
         if i > 2*20
             Δ = (logα - log.(flowres.α_values[end-20]))/20/2
+            # println(maximum(Δ))
             logα .+= Δ
         end
-
-
+        # display(logα')
     end
 
     flowres
