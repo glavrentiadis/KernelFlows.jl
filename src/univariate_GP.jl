@@ -72,8 +72,8 @@ end
 
 """Updates 1-d GPmodel M after new parameters newλ and/or newθ have
    been obtained by training the model. Even if these parameters are
-   not given, M.h is recomputed (it is not computed when GPModel is
-   initialized)."""
+   not given, M.h is recomputed, unless skip_K_update == true (it is
+   not computed when GPModel is initialized)."""
 function update_GPModel!(M::GPModel{T};
                          newλ::Union{Nothing, Vector{T}} = nothing,
                          newθ::Union{Nothing, Vector{T}} = nothing,
