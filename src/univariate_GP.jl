@@ -54,10 +54,10 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
 
     ntr, nλ = size(ZX_tr)
 
-    h = zeros(ntr)
+    h = zeros(T, ntr)
     # Initialize so, that if ZX_tr were Gaussian, points are on
     # average 1 std away from each other.
-    λ == nothing && (λ =  sqrt(2) * ones(nλ) ./ nλ)
+    λ == nothing && (λ =  sqrt(T(2)) * ones(T, nλ) ./ nλ)
     θ == nothing && (θ = kernel.θ_start[:])
 
     @assert length(λ) == nλ "Invalid λ length"
@@ -97,9 +97,8 @@ function update_GPModel!(M::GPModel{T};
     if !skip_K_update
         # Allocate buffers
         ntr = length(M.ζ)
-        (buf1 == nothing) && (buf1 = zeros(ntr, ntr))
-        (buf2 == nothing) && (buf2 = zeros(ntr, ntr))
-
+        (buf1 == nothing) && (buf1 = zeros(T, (ntr, ntr)))
+        (buf2 == nothing) && (buf2 = zeros(T, (ntr, ntr)))
         KI = kernel_matrix_fast(M.kernel, M.θ, M.Z, buf1, buf2; precision = true)
         mul!(M.h, KI, M.ζ)
     end

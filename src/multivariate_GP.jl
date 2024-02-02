@@ -37,7 +37,7 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΛ))
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
-    parallel = length(MVM.Ms[1].ζ) < 5001
+    parallel = length(MVM.Ms[1].ζ) < 10001
     if parallel
         print("\rUpdating all $(length(MVM.Ms)) GPs in parallel...")
         Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))

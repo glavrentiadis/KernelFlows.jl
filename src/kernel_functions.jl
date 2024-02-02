@@ -74,7 +74,7 @@ function linear(x1::AbstractVector{T}, x2::AbstractVector{T},
 end
 
 
-function get_MVGP_kernels(s::Symbol, G::GPGeometry)
+function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
 
     unary_kernels =  [:spherical_sqexp, :spherical_exp, :Matern32, :Matern52]
     binary_kernels = [:linear, :linear_mean]
@@ -85,13 +85,13 @@ function get_MVGP_kernels(s::Symbol, G::GPGeometry)
              :linear => linear, :linear_mean => linear_mean)
 
     # Function for getting initial θ for BinaryKernels
-    function get_binary_θs(s::Symbol, G::GPGeometry)
+    function get_binary_θs(s::Symbol, G::GPGeometry{T}) where T <: Real
         if s  == :linear
             θ₀list = [exp.([0., -7.]) for XP in G.Xprojs]
         elseif s == :linear_mean
             # get number of transformed X dims, plus nugget and weight
             nθs = [length(XP.spec.sparsedims) + 2 for XP in G.Xprojs]
-            θ₀list = [ones(nθ) for nθ in nθs]
+            θ₀list = [ones(T, nθ) for nθ in nθs]
             for θ in θ₀list
                 θ[end] = exp(-7.0)
             end
@@ -101,7 +101,7 @@ function get_MVGP_kernels(s::Symbol, G::GPGeometry)
     end
 
     if s in unary_kernels
-        θ₀_U = exp.([0., 0., -4., -7.]) # initial θ for UnaryKernels
+        θ₀_U = T.(exp.([0., 0., -4., -7.])) # initial θ for UnaryKernels
         klist = [UnaryKernel(d[s], θ₀_U, XP.spec.nCCA) for XP in G.Xprojs]
     elseif s in binary_kernels
         θ₀s = get_binary_θs(s, G)

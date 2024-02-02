@@ -59,13 +59,19 @@ five X dimensions.
 julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
 """
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
-                   Xtransf_deg::Int = 0, Xtransf_ϵ::T = 1e-2,
+                   Xtransf_deg::Int = 0, Xtransf_ϵ::Real = 1e-2,
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
-                   reg_CCA::T = 1e-2, reg_CCA_X::T = reg_CCA,
+                   reg_CCA::Real = 1e-2, reg_CCA_X::Real = reg_CCA,
                    maxdata::Int = 3000, scale_Y::Bool = true) where T <: Real
 
     X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
+
+    # Enforce types here without demanding user to e.g. add f0's to
+    # parameters:
+    Xtransf_ϵ = T(Xtransf_ϵ)
+    reg_CCA = T(reg_CCA)
+    reg_CCA_X = T(reg_CCA_X)
 
     (dummyXdims == false) && (dummyXdims = 1:0)
     (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
@@ -73,7 +79,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Do not use more CCA / PCA dims than there are dimensions
     nYCCA = min(nYCCA, size(Y)[2])
     nYPCA = min(nYPCA, size(Y)[2] - nYCCA)
-    nYCCA == 0 && (reg_CCA = 0.0)
+    nYCCA == 0 && (reg_CCA = zero(T))
 
     # If there are no CCA or PCA output vectors, we don't do any
     # transforms but model the data directly in the original
@@ -94,7 +100,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     μX = mean(X, dims = 1)[:]
     μY = mean(Y, dims = 1)[:]
     σX = std(X, dims = 1)[:]
-    σY = scale_Y ? std(Y, dims = 1)[:] : ones(size(Y)[2])
+    σY = scale_Y ? std(Y, dims = 1)[:] : ones(T, size(Y)[2])
 
     X .= (X .- μX') ./ σX'
     Y .= (Y .- μY') ./ σY'
@@ -106,12 +112,12 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     for i in 1:nY
         sparseXdims = collect(1:nXCCA + length(dummyXdims))
         XSpec = ProjectionSpec(nXCCA, 0, length(dummyXdims), dummyXdims, sparseXdims)
-        push!(Xprojs, Projection(zeros(size(X)[2], nX), zeros(nX), XSpec))
+        push!(Xprojs, Projection(zeros(T, (size(X)[2], nX)), zeros(T, nX), XSpec))
     end
 
     sparseYdims = collect(1:nYCCA + nYPCA + nYdummy)
     YSpec = ProjectionSpec(nYCCA, nYPCA, nYdummy, 1:nYdummy, sparseYdims)
-    Yproj = Projection(zeros(size(Y)[2], nY), zeros(nY), YSpec)
+    Yproj = Projection(zeros(T, size(Y)[2], nY), zeros(T, nY), YSpec)
 
     for i in 1:nYCCA
         FX, FY = CCA(X, Y; reg_Y = reg_CCA, reg_X = reg_CCA_X, nvecs = 1)
@@ -137,12 +143,12 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Get dummy output vectors and values
     if nYdummy > 0
         Yproj.values .= 1.0 # Data was standardized earlier
-        Yproj.vectors .= diagm(ones(nYdummy))
+        Yproj.vectors .= diagm(ones(T, nYdummy))
     end
 
     # Fill the rest of CCA X-dimensions and dummy X dimensions for all Y-vectors
     for i in 1:nY
-        yproj_i = Y_unreduced * Yproj.vectors[:,i]
+        yproj_i = @views Y_unreduced * Yproj.vectors[:,i]
         get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA_X, reg_CCA_X,
                            X_basis = Xprojs[i].vectors, X_values = Xprojs[i].values)
 

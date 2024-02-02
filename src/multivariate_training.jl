@@ -14,12 +14,14 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-function train!(MVM::MVGPModel{T}, ρ::Function;
-                ϵ::T = .05, niter::Int = 500, n::Int = 32,
-                ngridrounds::Int = 0, navg::Union{Nothing, Int} = nothing,
+function train!(MVM::MVGPModel{T};
+                ρ::Function = ρ_RMSE, ϵ::Real = .005, niter::Int = 500,
+                n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
+                navg::Union{Nothing, Int} = nothing,
                 ζcomps::AbstractVector{Int} = 1:length(MVM.Ms),
-                skip_K_update::Bool = false, quiet::Bool = false) where
-                T <: Real
+                skip_K_update::Bool = false) where T <: Real
+
+    ϵ = T(ϵ)
 
     if !quiet
         println("Initial scaling factors (log):")
@@ -30,7 +32,7 @@ function train!(MVM::MVGPModel{T}, ρ::Function;
     end
 
     Threads.@threads :static for k ∈ ζcomps
-        train!(MVM.Ms[k], ρ; ϵ, niter, n, ngridrounds, navg,
+        train!(MVM.Ms[k]; ρ, ϵ, niter, n, ngridrounds, navg,
                skip_K_update = true, quiet)
     end
 

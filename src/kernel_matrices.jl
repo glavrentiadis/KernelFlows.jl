@@ -1,12 +1,12 @@
 function sqr(x::T) where T <: Real
-    sqrt(x+1e-15)
+    sqrt(x+T(1e-15))
 end
 
 
 """A Distances.pairwise() workalike, but works with Zygote"""
 function pairwise_Euclidean(X::AbstractMatrix{T}) where T <: Real
-    H = -2. * X * X'
-    D = .5 * diag(H)
+    H = T(-2.) * X * X'
+    D = T(.5) * diag(H)
     sqr.(Symmetric(H .- D .- D'))
 end
 
@@ -14,12 +14,12 @@ end
 """Compute kernel matrix for unary kernels; no inversion. This
    function is autodifferentiable with Zygote and used for
    training."""
-function kernel_matrix(k::UnaryKernel, logθ::AbstractVector, X::AbstractArray{T}) where T <: Real
+function kernel_matrix(k::UnaryKernel, logθ::AbstractVector{T}, X::AbstractArray{T}) where T <: Real
 
     # Linear component only for first X dimensions
-    KK = @views X[:,1:k.nXlinear] * X[:,1:k.nXlinear]'
-    H1 = pairwise_Euclidean(X)
-    H2 = k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
+    KK = @fastmath @views X[:,1:k.nXlinear] * X[:,1:k.nXlinear]'
+    H1 = @fastmath pairwise_Euclidean(X)
+    H2 = @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
         Diagonal(exp(max(logθ[4], -15.)) * ones(size(X)[1])) + exp(logθ[3]) * KK
 
     H2
@@ -46,12 +46,12 @@ function kernel_matrix_fast(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractAr
     pairwise!(s, buf, X, dims = 1)
     buf .= k.k.(buf, θ[1], θ[2])
 
-    buf[diagind(buf)] .+= max(exp(-15.), θ[4])
+    buf[diagind(buf)] .+= max(T(exp(-15.)), θ[4])
     lf = θ[3] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
     XX = @views X[:,1:k.nXlinear]
-    BLAS.gemm!('N', 'T', lf, XX, XX, 1., buf)
+    BLAS.gemm!('N', 'T', lf, XX, XX, one(T), buf)
 
     if precision
         # Symmetrize: MKL gives 1e-17 rounding errors -> not PD

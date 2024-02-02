@@ -33,10 +33,11 @@ function best_α_from_flowres(flowres::FlowRes{T};
 end
 
 
-function train!(M::GPModel{T}, ρ::Function;
-                ϵ::T = .05, niter::Int = 500, n::Int = 48, ngridrounds::Int = 6,
-                navg::Union{Nothing, Int} = nothing,
-                skip_K_update::Bool = false, quiet::Bool = false) where T <: Real
+function train!(M::GPModel{T};
+                ρ::Function = ρ_RMSE, ϵ::T = .05, niter::Int = 500,
+                n::Int = 48, navg::Union{Nothing, Int} = nothing,
+                skip_K_update::Bool = false, quiet::Bool = false,
+                ngridrounds::Int = 6) where T <: Real
 
     α₀ = vcat(M.λ, M.θ)
     nλ = length(M.λ)
@@ -66,7 +67,7 @@ GPModel; that way it is more generally usable."""
 function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
               kernel::Kernel, α₀::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
-              ngridrounds::Int = 6, ϵ = 5e-2,
+              ngridrounds::Int = 6, ϵ::T = 5e-3,
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235)
@@ -78,7 +79,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
     X_full = X
     ζ_full = ζ
 
-    reg = 1e-7
+    reg = T(1e-7)
 
     ξ(X, ζ, logα) = ρ(X .* exp.(logα[1:nXdims]'), ζ, kernel, logα[nXdims+1:end]) + reg * sum(exp.(logα))
     ∇ξ(X, ζ, logα) = Zygote.gradient(logα -> ξ(X, ζ, logα), logα)

@@ -36,8 +36,8 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     apply_λ && (X .*= M.λ')
 
     # Allocate if buffers not given
-    (workbuf == nothing) && (workbuf = zeros(size(X)[1], length(M.h)))
-    (outbuf == nothing) && (outbuf = zeros(size(X)[1]))
+    (workbuf == nothing) && (workbuf = zeros(T, (size(X)[1], length(M.h))))
+    (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
 
     cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf)
     mul!(outbuf, workbuf, M.h)
