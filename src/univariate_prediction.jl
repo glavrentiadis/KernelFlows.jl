@@ -40,7 +40,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
 
     cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf)
-    mul!(outbuf, workbuf, M.h)
+    @fastmath mul!(outbuf, workbuf, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
 
@@ -59,10 +59,10 @@ function cross_covariance_matrix!(k::UnaryKernel, θ::AbstractVector{T},
 
     # This is a cheap way to compute distances
     pairwise!(s, workbuf, X1, X2, dims = 1)
-    workbuf .= k.k.(workbuf, θ[1], θ[2])
+    workbuf .= @fastmath k.k.(workbuf, θ[1], θ[2])
 
     # mul! won't accept AbstractArrays, but gemm! does not mind
-    @views BLAS.gemm!('N', 'T', θ[3], X1[:,1:k.nXlinear],
+    @fastmath @views BLAS.gemm!('N', 'T', θ[3], X1[:,1:k.nXlinear],
                       X2[:,1:k.nXlinear], one(T), workbuf)
 end
 
