@@ -20,7 +20,7 @@ function kernel_matrix(k::UnaryKernel, logθ::AbstractVector{T}, X::AbstractArra
     KK = @fastmath @views X[:,1:k.nXlinear] * X[:,1:k.nXlinear]'
     H1 = @fastmath pairwise_Euclidean(X)
     H2 = @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
-        Diagonal(exp(max(logθ[4], -15.)) * ones(size(X)[1])) + exp(logθ[3]) * KK
+        Diagonal(exp(max(logθ[4], T(-15.))) * ones(T, size(X)[1])) + exp(logθ[3]) * KK
 
     H2
 end

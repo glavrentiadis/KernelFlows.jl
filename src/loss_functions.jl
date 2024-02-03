@@ -32,7 +32,7 @@ function ρ_LOI(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Kernel, log�
     # samples in X and average. Reduces to:
     num = y' * y / Ω[1] / n
 
-    return 1. - num / (y' * inv(Symmetric(Ω)) * y)[1]
+    return one(T) - num / (y' * inv(Symmetric(Ω)) * y)[1]
 end
 
 
@@ -53,7 +53,7 @@ function ρ_MLE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Kernel, log�
     LI = inv(L)
     z = LI * y
 
-    a1 = .5 * z' * z
+    a1 = T(.5) * z' * z
     # a2 = .5 * (y' * inv(Symmetric(Ω)) * y)
     # println("$a1, $a2")
 
@@ -76,7 +76,7 @@ function ρ_KF(X::AbstractArray{T}, y::AbstractArray{T}, k::Kernel, logθ::Abstr
     yc = @view y[1:Nc]
     Ωc = Symmetric(Ω[1:Nc, 1:Nc])
 
-    return 1. - ((yc' * inv(Ωc) * yc)[1] / (y' * inv(Symmetric(Ω)) * y)[1])
+    return one(T) - ((yc' * inv(Ωc) * yc)[1] / (y' * inv(Symmetric(Ω)) * y)[1])
 end
 
 
@@ -113,7 +113,7 @@ function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::Kernel
         M = @views M - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i]
     end
 
-    return 1.0 * N - (y' * M * y) / (y' * Ω⁻¹ * y)
+    return one(T) * N - (y' * M * y) / (y' * Ω⁻¹ * y)
 end
 
 
@@ -130,7 +130,7 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, logθ::Ab
     κ = max(min(n÷5, 50),4)
     s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:κ], rev=true) : 1:n
 
-    tot = 0.
+    tot = zero(T)
     for i in s
         m = [1:i-1; i+1:n]
         t = @views (Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m] * y[m] - y[i])^2
@@ -141,12 +141,13 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, logθ::Ab
 end
 
 
-function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T <: Real
+function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel,
+                       logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T <: Real
     Ω = kernel_matrix(k, logθ, X)
     Ω⁻¹ = inv(Ω)
     n = length(y)
-    L2tot = 0.0
-    vartot = 0.0
+    L2tot = zero(T)
+    vartot = zero(T)
 
     # Predict this many points closest to the center, or everything
     s = sortperm(sum(Ω, dims = 2)[:], rev = true)
@@ -168,7 +169,7 @@ function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, lo
     # The first term below is the average squared error, as in
     # ρ_RMSE. The second one penalizes for any departure of the
     # z-score sample variance from unity.
-    return L2tot / n + (vartot/(n-1) - 1.0)^2
+    L2tot / n + (vartot/(n-1) - one(T))^2
 end
 
 
@@ -178,7 +179,7 @@ function ρ_abs(X::AbstractArray{T}, y::AbstractVector{Float64}, k::Kernel, log�
     Ω⁻¹ = inv(Ω)
     N = length(y)
     M = predictonlycenter ? 3 : N
-    tot = 0.
+    tot = zero(T)
 
     for i ∈ 1:M
         m = [1:i-1; i+1:N]

@@ -33,21 +33,21 @@ end
 # For UnaryKernel, first parameter (a / θ[1]) is always weight of the
 # component, second (b / θ[2]) is the length scale.
 
-spherical_sqexp(d::T, a::T, b::T) where T <: Real = a * exp(-.5d*d / b)
+spherical_sqexp(d::T, a::T, b::T) where T <: Real = a * exp(T(-.5)*d*d / b)
 spherical_sqexp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_sqexp(d, θ[1], θ[2])
 
 spherical_exp(d::T, a::T, b::T) where T <: Real = a * exp(-d / b)
 spherical_exp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_exp(d, θ[1], θ[2])
 
 function Matern32(d::T, a::T, b::T) where T <: Real
-    h = sqrt(3.) * d / b # d is Euclidean distance
-    a * (1. + h) * exp(-h)
+    h = sqrt(T(3.)) * d / b # d is Euclidean distance
+    a * (one(T) + h) * exp(-h)
 end
 Matern32(d::T; θ::AbstractVector{T}) where T <: Real = Matern32(d, θ[1], θ[2])
 
 function Matern52(d::T, a::T, b::T) where T <: Real
-    h = sqrt(5.) * d / b
-    a * (1. + h + h^2 / 3.) * exp(-h)
+    h = sqrt(T(5.)) * d / b
+    a * (T(1.) + h + h^2 / T(3.)) * exp(-h)
 end
 Matern52(d::T; θ::AbstractVector{T}) where T <: Real = Matern52(d, θ[1], θ[2])
 
