@@ -273,7 +273,8 @@ end
 """Move from original coordinates to dimension-reduced (or augmented)
 coordinates."""
 function reduce(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T}) where T <: Real
-    X = (X .- μ') ./ σ' # apply standardization
+    X = X .- μ' # center
+    X ./= σ' # scale
     @views H = P.vectors[:, P.spec.sparsedims] ./ P.values[P.spec.sparsedims]'
     X * H
 end

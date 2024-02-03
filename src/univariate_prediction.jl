@@ -31,7 +31,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
                  workbuf::Union{Nothing, Matrix{T}} = nothing,
-                 outbuf::Union{Nothing, Matrix{T}} = nothing) where T <: Real
+                 outbuf::Union{Nothing, AbstractVector{T}} = nothing) where T <: Real
 
     apply_λ && (X .*= M.λ')
 

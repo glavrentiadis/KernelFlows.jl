@@ -24,9 +24,17 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     nte = size(X)[1]
     nzycols = length(MVM.Ms)
     ZY_pred = zeros(T, (nte, nzycols))
+
+    nt = Threads.nthreads()
+    workbufs = [zeros(T, (size(X)[1], length(MVM.Ms[1].h))) for _ in 1:nt]
+
     Threads.@threads :static for i ∈ Mlist
+        tid = Threads.threadid()
         Z = reduce_inputs ? reduce_X(X, MVM.G, i) : X
-        ZY_pred[:,i] .= predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf)
+
+        # Do the prediction in-place directly to outbuf
+        predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf,
+                workbuf = workbufs[tid], outbuf = @view ZY_pred[:,i])
     end
 
     return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred
@@ -53,5 +61,3 @@ function remove_extrapolations(MVM::MVGPModel{T}, X::Matrix{T}) where T <: Real
     s_te = setdiff(1:nte, collect(1:nte)[m])
     X[s_te,:], s_te
 end
-
-
