@@ -36,6 +36,20 @@ function splitrange(start::Int, stop::Int, nodes::Int)
 end
 
 
+"""Split inputs X and outputs Y randomly into training and
+testing. The number of points in testing is given by kwarg nte. Random
+seed can be fixed for reproducibility."""
+function split_training_and_testing(X::Matrix{T}, Y::Matrix{T}; nte::Int = 500,
+                                    seed::UInt = rand(UInt)) where T <: Real
+    Random.seed!(seed)
+    ndata = size(X)[1]
+    s = randperm(ndata)
+    s_tr = s[1:ndata-nte]
+    s_te = s[ndata-nte+1:ndata]
+    X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
+end
+
+
 function deciles(y::Vector{T}) where T <: Real
     cs = sort(y)
     n = length(y)
