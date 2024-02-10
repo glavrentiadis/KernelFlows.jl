@@ -51,6 +51,12 @@ function Matern52(d::T, a::T, b::T) where T <: Real
 end
 Matern52(d::T; θ::AbstractVector{T}) where T <: Real = Matern52(d, θ[1], θ[2])
 
+function inverse_quadratic(d::T, a::T, b::T) where T <: Real
+    a / sqrt(d^2 + b)
+end
+inverse_quadratic(d::T; θ::AbstractVector{T}) where T <: Real = inverse_quadratic(d, θ[1], θ[2])
+
+
 """Linear kernel (with mean) for testing BinaryKernel
 correctness. This kernel also includes the mean, which is given as the
 log of the θ, since θ are always positive. θ[1] is the weight of the
@@ -76,11 +82,13 @@ end
 
 function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
 
-    unary_kernels =  [:spherical_sqexp, :spherical_exp, :Matern32, :Matern52]
+    unary_kernels =  [:spherical_sqexp, :spherical_exp,
+                      :Matern32, :Matern52, :inverse_quadratic]
     binary_kernels = [:linear, :linear_mean]
 
     d = Dict(:spherical_sqexp => spherical_sqexp,
              :spherical_exp => spherical_exp,
+             :inverse_quadratic => inverse_quadratic,
              :Matern32 => Matern32, :Matern52 => Matern52,
              :linear => linear, :linear_mean => linear_mean)
 
