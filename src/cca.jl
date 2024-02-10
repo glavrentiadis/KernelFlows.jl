@@ -16,14 +16,21 @@
 #
 
 
-
 """Carries out CCA for input-output pair X,Y"""
 function CCA(X::Matrix{T}, Y::Matrix{T}; reg_Y::T = 1e-2, reg_X::T = reg_Y, maxdata::Int = 3000, nvecs = 50) where T <: Real
 
     ndata = min(maxdata, size(X)[1]) # Use max ndata data points
     ndx = size(X)[2]
-
     s = randperm(size(X)[1])[1:ndata]
+
+    X = X[s,:]
+    Y = Y[s,:]
+    (Xvecs, Xvals) = get_PCA_vectors(X, maxdata)
+    (Yvecs, Yvals) = get_PCA_vectors(Y, maxdata)
+
+    X = X * Xvecs
+    Y = Y * Yvecs
+
     H = @views hcat(X[s,:], Y[s,:])
     C = cov(H)
 
@@ -43,10 +50,13 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg_Y::T = 1e-2, reg_X::T = reg_Y, maxd
     # No need to compute Y vectors to get 1-d subspace of 1-d space
     if size(Y)[2] > 1
         R_Y = CyyI * Cxy * CxxI * Cxy'
-        F_Y = fasteigs(R_Y, nvecs; force_real = true)
+        F0_Y = fasteigs(R_Y, nvecs; force_real = true)
+        F_Y = (vectors = Yvecs * F0_Y.vectors, values = F0_Y.values)
     else
-        F_Y = nothing
+        F_Y = (vectors = ones(T, (1,1)), values = ones(T, 1))
     end
+
+    F_X = (vectors = Xvecs * F_X.vectors, values = F_X.values)
 
     F_X, F_Y
 end

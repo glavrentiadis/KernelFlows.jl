@@ -248,6 +248,7 @@ function get_PCA_vectors(X::AbstractMatrix{T}, nPCA::Int) where T <: Real
     # Check if we are centered, and if not, center data before SVD
     @views X = abs(sum(X[:,1])) > 1e-10 ? X .- mean(X, dims = 1) : X
     (U, S, Vt) = svd(X)
+    nPCA = min(length(S), nPCA)
     (vecs, vals) =  (Vt[:,1:nPCA], S[1:nPCA]  ./ sqrt(size(X)[1]-1.))
     return (vecs, vals)
 
