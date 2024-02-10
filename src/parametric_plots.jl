@@ -103,7 +103,14 @@ end
 using Makie
 function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::AbstractMatrix{T};
                           diff = false, origspace = false, plot_dummyXdims::Bool = true,
-                          Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing) where T <: Real
+                          Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing,
+                          Xtransfs = ones(Int, size(X_te)[1])) where T <: Real
+
+    xt = [identity, log, cosd] # same as in VSWIREmulator.jl
+    X_te = X_te[:,:]
+    for (i,t) in enumerate(Xtransfs)
+        X_te[:,i] .= xt[t].(X_te[:,i])
+    end
 
     ZY_te_pred = (Y_te_pred == nothing) ?  predict(MVM, X_te; recover_outputs = false) : reduce_Y(Y_te_pred, MVM.G)
     ZY_te = reduce_Y(Y_te, MVM.G)
