@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, kernel_matrix, kernel_matrix_fast, deciles
+export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, kernel_matrix, kernel_matrix_fast, deciles, split_training_and_testing
 
 using LinearAlgebra
 using Random
@@ -47,6 +47,17 @@ function split_training_and_testing(X::Matrix{T}, Y::Matrix{T}; nte::Int = 500,
     s_tr = s[1:ndata-nte]
     s_te = s[ndata-nte+1:ndata]
     X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
+end
+
+
+function split_training_and_testing(X::Matrix{T}, Y_all::Vector{Matrix{T}};
+                                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
+    Random.seed!(seed)
+    ndata = size(X)[1]
+    s = randperm(ndata)
+    s_tr = s[1:ndata-nte]
+    s_te = s[ndata-nte+1:ndata]
+    X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all]
 end
 
 
