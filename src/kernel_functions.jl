@@ -109,8 +109,10 @@ function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
     end
 
     if s in unary_kernels
-        θ₀_U = T.(exp.([0., 0., -4., -7.])) # initial θ for UnaryKernels
-        klist = [UnaryKernel(d[s], θ₀_U, XP.spec.nCCA) for XP in G.Xprojs]
+        θ₀_U = T.(exp.([0., 0., 0., -12.])) # initial θ for UnaryKernels
+        klist = [UnaryKernel(d[s], θ₀_U, XP.spec.nCCA + length(XP.spec.sparsedims))
+                 for XP in G.Xprojs]
+        # klist = [UnaryKernel(d[s], θ₀_U, 0) for XP in G.Xprojs]
     elseif s in binary_kernels
         θ₀s = get_binary_θs(s, G)
         klist = [BinaryKernel(d[s], θ₀) for θ₀ in θ₀s]

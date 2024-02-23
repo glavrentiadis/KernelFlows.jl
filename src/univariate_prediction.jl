@@ -43,7 +43,6 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     @fastmath mul!(outbuf, workbuf, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
-
     outbuf
 end
 
@@ -77,8 +76,6 @@ function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
             workbuf[i,j] = @views k.k(X1[i,:], X2[j,:], θ[1:end-1])
         end
     end
-
-
 
 
 end
