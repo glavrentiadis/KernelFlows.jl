@@ -128,7 +128,7 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, logθ::Ab
     # predicted, discarding anything on the edges. May improve
     # performance / accuracy.
     κ = max(min(n÷5, 50),4)
-    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:κ], rev=true) : 1:n
+    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:κ], rev=true) : 1:κ
 
     tot = zero(T)
     for i in s
