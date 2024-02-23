@@ -102,8 +102,15 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     σX = std(X, dims = 1)[:]
     σY = scale_Y ? std(Y, dims = 1)[:] : ones(T, size(Y)[2])
 
-    X .= (X .- μX') ./ σX'
-    Y .= (Y .- μY') ./ σY'
+    # Don't scale dimensions with zero variance to avoid NaNs
+    Xnonconstdims = σX .!= 0.
+    Ynonconstdims = σY .!= 0.
+
+    σY .= max.(1e-6, σY)
+    σY .= min.(1e6, σY)
+
+    X[:,Xnonconstdims] .= (X .- μX')[:,Xnonconstdims] ./ σX[Xnonconstdims]'
+    Y[:,Ynonconstdims] .= (Y .- μY')[:,Ynonconstdims] ./ σY[Ynonconstdims]'
 
     Y_unreduced = Y[:,:]
 
