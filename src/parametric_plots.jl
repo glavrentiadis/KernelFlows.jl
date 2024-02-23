@@ -26,8 +26,10 @@ function quantileplot!(p::Plots.Subplot, Y_te::AbstractMatrix{T}, Y_te_pred::Abs
     labels = [nothing, nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
     quantiles = hcat([quantile(y, qs) for y ∈ eachcol(Y_res)]...) .+ μ'
 
-    for (i,c) ∈ enumerate(colors)
+    for (i,c) ∈ enumerate(colors[1:4])
         Plots.plot!(p, x, quantiles[i,:], fillrange = quantiles[i+1,:],
+              color = c, alpha = .2, label = labels[i])
+        Plots.plot!(p, x, quantiles[9-i+1,:], fillrange = quantiles[9-i,:],
               color = c, alpha = .2, label = labels[i])
     end
     Plots.plot!(p, xlims = extrema(x))
@@ -42,8 +44,11 @@ function quantileplot!(ax::Makie.Axis, Y_te::AbstractMatrix{T}, Y_te_pred::Abstr
     colors = ["gray", "green", "blue", "red", "red", "blue", "green", "gray"]
     labels = [nothing, nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
     quantiles = hcat([quantile(y, qs) for y ∈ eachcol(Y_res)]...) .+ μ'
+
+    lineidxs = [1,2,3,4,6,7,8,9]
+
     for (i,c) ∈ enumerate(colors)
-        lines!(ax, x, quantiles[i,:], color=c)
+        lines!(ax, x, quantiles[lineidxs[i],:], color=c)
         band!(ax, x, quantiles[i,:], quantiles[i+1,:], color=c, alpha=.2, label = labels[i])
     end
     Makie.xlims!(ax, extrema(x))
