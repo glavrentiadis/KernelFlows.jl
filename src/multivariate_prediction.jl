@@ -14,6 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+
 function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                  reduce_inputs::Bool = true,
                  apply_λ::Bool = true,

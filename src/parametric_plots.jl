@@ -106,7 +106,7 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
                           Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing,
                           Xtransfs = ones(Int, size(X_te)[1])) where T <: Real
 
-    xt = [identity, log, cosd] # same as in VSWIREmulator.jl
+    xt = [identity, log, cosd, x -> cosd(x-90), x -> log(180-x)] # same as in VSWIREmulator.jl
     X_te = X_te[:,:]
     for (i,t) in enumerate(Xtransfs)
         X_te[:,i] .= xt[t].(X_te[:,i])

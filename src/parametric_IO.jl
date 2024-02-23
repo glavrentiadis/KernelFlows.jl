@@ -52,6 +52,7 @@ handled in load_GPModel()"""
 function load_kernel(G::JLD2.Group)
     kerneltable = Dict("Matern32" => Matern32,
                        "Matern52" => Matern52,
+                       "inverse_quadratic" => inverse_quadratic,
                        "spherical_exp" => spherical_exp,
                        "spherical_sqexp" => spherical_sqexp)
 
