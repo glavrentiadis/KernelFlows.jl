@@ -74,7 +74,7 @@ methods that are used for the input space can cause errors."""
 function TwoLevelMVGP(MVM1::MVGPModel{T}, # Upper level model
                       X_tr::Matrix{T},   # Training inputs for second-level MVM
                       Y_tr::Matrix{T};   # Training outputs for second-level MVM
-                      kernel::Function = MVM1.Ms[1].kernel,
+                      kernel::Symbol = :Matern32,
                       dimreduceargs::NamedTuple = (nYCCA = 3, nYPCA = 3, nXCCA = 1),
                       nvec_for_X_aug::Int = 0,
                       npredict_tr::Int = 500,
@@ -89,7 +89,7 @@ function TwoLevelMVGP(MVM1::MVGPModel{T}, # Upper level model
         # X_tr_new = Y_tr_pred_LOO * Y_projvecs # Y only
     else
         Y_projvecs = nothing
-        X_tr_new = X_tr
+        X_tr_new = X_tr[s_LOO,:]
     end
 
     G = dimreduce(X_tr_new, Ydiff_tr; dimreduceargs...)
@@ -110,7 +110,7 @@ function LOO_predict_training(MVM::MVGPModel{T}; npredict::Int = length(MVM.Ms[1
     ZY_pred = zeros(npredict, nM)
     s = randperm(ndata)[1:npredict]
     Threads.@threads :static for (j,M) in collect(enumerate(MVM.Ms))
-        Ω⁻¹ = kernel_matrix_fast(M.Z, buf1s[j], buf2s[j], M.kernel, M.θ, nXlinear = nXl(MVM, j), precision = true)
+        Ω⁻¹ = kernel_matrix_fast(M.kernel, M.θ, M.Z, buf1s[j], buf2s[j]; precision = true)
         Ω = Symmetric(buf1s[j]')[:,:]
 
         buf = zeros(ndata - 1, ndata - 1)

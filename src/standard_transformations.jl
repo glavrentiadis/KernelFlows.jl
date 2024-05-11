@@ -48,6 +48,7 @@ function polyexpand(X::AbstractMatrix{T}, degs::AbstractVector{Int}) where T <: 
             X_new[:,i] .*= X[:,d]
         end
     end
+    X_new = X_new[:, sum(X_new, dims = 1)[:] .!= 0]
     return X_new
 end
 

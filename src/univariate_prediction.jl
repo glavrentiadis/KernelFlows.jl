@@ -30,17 +30,19 @@ function X needs to be given in reduced coordinates.
 function predict(M::GPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 workbuf::Union{Nothing, Matrix{T}} = nothing,
+                 workbuf1::Union{Nothing, Matrix{T}} = nothing,
+                 workbuf2::Union{Nothing, Matrix{T}} = nothing,
                  outbuf::Union{Nothing, AbstractVector{T}} = nothing) where T <: Real
 
     apply_λ && (X .*= M.λ')
 
     # Allocate if buffers not given
-    (workbuf == nothing) && (workbuf = zeros(T, (size(X)[1], length(M.h))))
+    (workbuf1 == nothing) && (workbuf1 = zeros(T, (size(X)[1], length(M.h))))
+    (workbuf2 == nothing) && (workbuf2 = similar(workbuf1))
     (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
 
-    cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf)
-    @fastmath mul!(outbuf, workbuf, M.h)
+    cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf1, workbuf2)
+    @fastmath mul!(outbuf, workbuf1, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
     outbuf
@@ -49,20 +51,23 @@ end
 
 """Compute cross-covariance matrix between X1 and X2. Typically this
 would be between test inputs X (X1) and training data in GPModel.Z
-(X2). The covariance matrix is computed in-place in workbuf."""
+(X2). The covariance matrix is computed in-place in workbuf1."""
 function cross_covariance_matrix!(k::UnaryKernel, θ::AbstractVector{T},
                                   X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
-                                  workbuf::Matrix{T}) where T <: Real
+                                  workbuf1::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
 
     s = Euclidean()
 
     # This is a cheap way to compute distances
-    pairwise!(s, workbuf, X1, X2, dims = 1)
-    workbuf .= @fastmath k.k.(workbuf, θ[1], θ[2])
+    pairwise!(s, workbuf1, X1, X2, dims = 1)
+
+    # Fast in-place computing of covariance. workbuf2 is used as a
+    # temporary buffer here.
+    workbuf1 .= @fastmath k.k.(workbuf1, θ[1], θ[2])
 
     # mul! won't accept AbstractArrays, but gemm! does not mind
     @fastmath @views BLAS.gemm!('N', 'T', θ[3], X1[:,1:k.nXlinear],
-                      X2[:,1:k.nXlinear], one(T), workbuf)
+                      X2[:,1:k.nXlinear], one(T), workbuf1)
 end
 
 

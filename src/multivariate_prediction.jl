@@ -20,6 +20,8 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  recover_outputs::Bool = true,
                  apply_zyinvtransf::Bool = true,
+                 workbufs1::Union{Vector{Matrix{T}}, Nothing} = nothing,
+                 workbufs2::Union{Vector{Matrix{T}}, Nothing} = nothing,
                  Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
 
     nte = size(X)[1]
@@ -27,7 +29,9 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     ZY_pred = zeros(T, (nte, nzycols))
 
     nt = Threads.nthreads()
-    workbufs = [zeros(T, (size(X)[1], length(MVM.Ms[1].h))) for _ in 1:nt]
+    wbsize = (size(X)[1], length(MVM.Ms[1].h))
+    workbufs1 = workbufs1 == nothing ? [zeros(T, wbsize) for _ in 1:nt] : workbufs1
+    workbufs2 = workbufs2 == nothing ? [zeros(T, wbsize) for _ in 1:nt] : workbufs2
 
     Threads.@threads :static for i ∈ Mlist
         tid = Threads.threadid()
@@ -35,7 +39,8 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
         # Do the prediction in-place directly to outbuf
         predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf,
-                workbuf = workbufs[tid], outbuf = @view ZY_pred[:,i])
+                workbuf1 = workbufs1[tid], workbuf2 = workbufs2[tid],
+                outbuf = @view ZY_pred[:,i])
     end
 
     return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred
