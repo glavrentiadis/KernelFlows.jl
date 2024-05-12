@@ -99,8 +99,8 @@ function update_GPModel!(M::GPModel{T};
         ntr = length(M.ζ)
         (buf1 == nothing) && (buf1 = zeros(T, (ntr, ntr)))
         (buf2 == nothing) && (buf2 = zeros(T, (ntr, ntr)))
-        KI = kernel_matrix_fast(M.kernel, M.θ, M.Z, buf1, buf2; precision = true)
-        mul!(M.h, KI, M.ζ)
+        kernel_matrix_fast!(M.kernel, M.θ, M.Z, buf1, buf2; precision = true)
+        mul!(M.h, buf2, M.ζ)
     end
 
     M

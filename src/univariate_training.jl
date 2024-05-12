@@ -37,14 +37,17 @@ function train!(M::GPModel{T};
                 ρ::Function = ρ_RMSE, ϵ::T = .05, niter::Int = 500,
                 n::Int = 48, navg::Union{Nothing, Int} = nothing,
                 skip_K_update::Bool = false, quiet::Bool = false,
-                ngridrounds::Int = 0) where T <: Real
+                ngridrounds::Int = 0,
+                stepping::Symbol = :standard,
+                inertia::Int = 0) where T <: Real
 
     α₀ = vcat(M.λ, M.θ)
     nλ = length(M.λ)
 
     Z = M.Z ./ M.λ'
     flowres = flow(Z, M.ζ, ρ, M.kernel, α₀;
-                   ϵ, niter, n, ngridrounds, quiet)
+                   ϵ, niter, n, ngridrounds, quiet,
+                   stepping, inertia)
 
     if niter > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -68,6 +71,8 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
               kernel::Kernel, α₀::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
               ngridrounds::Int = 0, ϵ::T = 5e-3,
+              stepping::Symbol = :standard,
+              inertia::Int = 0,
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235)
@@ -111,19 +116,45 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
+    # minibatch_method = :neighborhood
+    minibatch_method = :randompartitions
+
     # minibatches
-    all_s = get_random_partitions(ndata, n, niter)
-    all_s = collect(eachrow(all_s))
+    if minibatch_method == :randompartitions
+        all_s = get_random_partitions(ndata, n, niter)
+        all_s = collect(eachrow(all_s))
+    end
 
     grad = zero(logα) # buffer
     g = similar(grad) # buffer
     b = similar(grad)
     bb = similar(grad)
+
+    Ω = zeros(ndata, ndata)
+    buf = zeros(ndata, ndata)
+    Z = similar(X) # buffer
+
     for i ∈ 1:niter
         quiet || ((i % 500 == 0) && println("Training round $i/$niter"))
-        s = all_s[i]
 
-        push!(flowres.α_values, exp.(logα))
+        # Recalculate tree every now and then; otherwise correct
+        # observations are not picked
+        if i % 200 == 1 && minibatch_method == :neighborhood
+            Z .= X
+            Z .*= exp.(logα[1:nXdims])'
+            kernel_matrix_fast!(kernel, exp.(logα[nXdims+1:end]), Z, buf, Ω;
+                                     precision = false)
+            Ω .= abs.(Ω)
+        end
+
+        # Indexes for data in X below:
+        if minibatch_method == :randompartitions
+            s = all_s[i]
+        elseif minibatch_method == :neighborhood
+            k = rand(1:ndata)
+            s = sample(1:ndata, Weights(Ω[:,k]), n, replace = false)
+        end
+
         flowres.ρ_values[i] = @views ξ(X[s,:], ζ[s], logα)[1]
         grad .= @views ∇ξ(X[s,:], ζ[s], logα)[1]
         g .= grad == nothing ? zero(logα) : grad
@@ -133,21 +164,20 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T}, ρ::Function,
         gn(g) = sqrt(sum(g.^2)) + 1e-9
 
         # gradnorm = gn(g)
-        # b .= ϵ * g  / gradnorm
-        # Uncomment to allow inertia.
+        b .= stepping == :fixed ? ϵ * g  / gn(g) : ϵ * g
 
-        b .= ϵ * g
-        if gn(b) > .5
-            b .= .5*b/gn(b)
-        end
+        # if gn(b) > .5
+        #     b .= .5*b/gn(b)
+        # end
 
         logα .-= b
-        if i > 2*20
-            Δ = (logα - log.(flowres.α_values[end-20]))/20/2
-            # println(maximum(Δ))
+
+        # Inertia in optimization
+        if inertia > 0 && i > 2*inertia
+            Δ = (logα - log.(flowres.α_values[end-inertia]))/inertia/2
             logα .+= Δ
         end
-        # display(logα')
+        push!(flowres.α_values, exp.(logα))
     end
 
     flowres

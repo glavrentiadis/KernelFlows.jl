@@ -40,18 +40,19 @@ end
 
 """Compute kernel matrix K for unary kernels, or if precision == true,
    its inverse. Not autodifferentiable, used for predictions"""
-function kernel_matrix_fast(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
+function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
     s = Euclidean()
 
     pairwise!(s, buf, X, dims = 1)
     buf .= k.k.(buf, θ[1], θ[2])
 
-    buf[diagind(buf)] .+= max(T(exp(-15.)), θ[4])
+    @views buf[diagind(buf)] .+= max(T(exp(-15.)), θ[4])
     lf = θ[3] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
     XX = @views X[:,1:k.nXlinear]
-    BLAS.gemm!('N', 'T', lf, XX, XX, one(T), buf)
+    ob = precision ? buf : outbuf
+    BLAS.gemm!('N', 'T', lf, XX, XX, one(T), ob)
 
     if precision
         # Symmetrize: MKL gives 1e-17 rounding errors -> not PD
@@ -63,17 +64,13 @@ function kernel_matrix_fast(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractAr
 
         L = cholesky!(buf)
         ldiv!(outbuf, L, UniformScaling(1.)(size(X)[1]))
-    else
-        outbuf .= Symmetric(buf)
     end
-
-    outbuf
 end
 
 
 """Compute kernel matrix K for binary kernels, or if precision == true,
    its inverse. Not autodifferentiable, used for predictions"""
-function kernel_matrix_fast(k::BinaryKernel, θ::AbstractVector{T}, X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
+function kernel_matrix_fast!(k::BinaryKernel, θ::AbstractVector{T}, X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
 
     n = size(X)[1]
     K = zeros(n,n)

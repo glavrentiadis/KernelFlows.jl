@@ -19,7 +19,9 @@ function train!(MVM::MVGPModel{T};
                 n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
                 navg::Union{Nothing, Int} = nothing,
                 ζcomps::AbstractVector{Int} = 1:length(MVM.Ms),
-                skip_K_update::Bool = false) where T <: Real
+                skip_K_update::Bool = false,
+                stepping::Symbol = :standard,
+                inertia::Int = 0) where T <: Real
 
     ϵ = T(ϵ)
 
@@ -33,7 +35,7 @@ function train!(MVM::MVGPModel{T};
 
     Threads.@threads :static for k ∈ ζcomps
         train!(MVM.Ms[k]; ρ, ϵ, niter, n, ngridrounds, navg,
-               skip_K_update = true, quiet)
+               skip_K_update = true, quiet, stepping, inertia)
     end
 
     if !quiet
@@ -48,4 +50,24 @@ function train!(MVM::MVGPModel{T};
     skip_K_update || update_MVGPModel!(MVM)
 
     MVM
+end
+
+
+function train!(MVMs::Vector{MVGPModel{T}};
+                ρ::Function = ρ_RMSE, ϵ::Real = .005, niter::Int = 500,
+                n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
+                navg::Union{Nothing, Int} = nothing,
+                skip_K_update::Bool = false,
+                stepping::Symbol = :standard,
+                inertia::Int = 0) where T <: Real
+    ϵ = T(ϵ)
+
+    Mlist = [M for MVM in MVMs for M in MVM.Ms]
+    println("Training $(length(Mlist)) GPs...")
+    Threads.@threads :static for M in Mlist
+        train!(M; ρ, ϵ, niter, n, ngridrounds, navg,
+               skip_K_update, quiet, stepping, inertia)
+    end
+    println("done!")
+
 end

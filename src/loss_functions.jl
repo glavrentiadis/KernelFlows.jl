@@ -127,7 +127,8 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::Kernel, logθ::Ab
     # With predictonlycenter, only κ best-informed points are
     # predicted, discarding anything on the edges. May improve
     # performance / accuracy.
-    κ = max(min(n÷5, 50),4)
+    # κ = max(min(n÷5, 20),4)
+    κ = 4
     s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:κ], rev=true) : 1:κ
 
     tot = zero(T)
