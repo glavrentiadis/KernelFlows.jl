@@ -104,13 +104,17 @@ function LOO_predict_training(MVM::MVGPModel{T}; npredict::Int = length(MVM.Ms[1
 
     ndata = size(MVM.Ms[1].Z)[1]
     nM = length(MVM.Ms)
+    nt = Threads.nthreads()
     buf1s = [zeros(ndata, ndata) for _ in 1:nM]
     buf2s = [zeros(ndata, ndata) for _ in 1:nM]
 
     ZY_pred = zeros(npredict, nM)
     s = randperm(ndata)[1:npredict]
+    println("Predicting $npredict training data with leave-one-out")
+    computed = zeros(Int, nt)
     Threads.@threads :static for (j,M) in collect(enumerate(MVM.Ms))
-        Ω⁻¹ = kernel_matrix_fast(M.kernel, M.θ, M.Z, buf1s[j], buf2s[j]; precision = true)
+        kernel_matrix_fast!(M.kernel, M.θ, M.Z, buf1s[j], buf2s[j]; precision = true)
+        Ω⁻¹ = buf2s[j]
         Ω = Symmetric(buf1s[j]')[:,:]
 
         buf = zeros(ndata - 1, ndata - 1)
@@ -120,7 +124,10 @@ function LOO_predict_training(MVM::MVGPModel{T}; npredict::Int = length(MVM.Ms[1
         b2 = zeros(ndata)
 
         for k in 1:npredict
-            (k % 100 == 0) && println(k)
+            if k % 100 == 0
+                print("\rComputed $(sum(computed)) out of $(nM * npredict) points ")
+            end
+
             i = s[k]
             m = [1:i-1; i+1:ndata]
             buff .= Ω⁻¹
@@ -132,8 +139,10 @@ function LOO_predict_training(MVM::MVGPModel{T}; npredict::Int = length(MVM.Ms[1
             buff[i,:] .= 0.
             @views  BLAS.symv!('U', 1., buff, b2, 0., z)
             ZY_pred[k,j] =  z' * M.ζ
+            computed[Threads.threadid()] += 1
         end
     end
+    println()
 
     Y_tr_pred_LOO = recover_Y(ZY_pred, MVM.G)
 
