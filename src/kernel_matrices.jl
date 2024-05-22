@@ -1,5 +1,5 @@
 function sqr(x::T) where T <: Real
-    sqrt(x+T(1e-15))
+    sqrt(x+eps(T))
 end
 
 
@@ -19,9 +19,10 @@ function kernel_matrix(k::UnaryKernel, logθ::AbstractVector{T}, X::AbstractArra
     # Linear component only for first X dimensions
     KK = @fastmath @views X[:,1:k.nXlinear] * X[:,1:k.nXlinear]'
     H1 = @fastmath pairwise_Euclidean(X)
-    H2 = @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
-        Diagonal(exp(max(logθ[4], T(-15.))) * ones(T, size(X)[1])) + exp(logθ[3]) * KK
 
+    δ = max(exp(-15), exp(logθ[4]))
+    H2 = @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
+        Diagonal(δ * ones(T, size(X)[1])) + exp(logθ[3]) * KK
     H2
 end
 
@@ -33,7 +34,8 @@ function kernel_matrix(k::BinaryKernel, logθ::AbstractVector{T}, X::AbstractArr
 
     K = hcat([[k.k(x, y, exp.(logθ[1:end-1])) for y in eachrow(X)] for x in eachrow(X)]...)
     # Add nugget
-    K += Diagonal(exp(logθ[end]) * ones(size(X)[1]))
+    δ = max(exp(-15.), exp(logθ[4]))
+    K += Diagonal(δ * ones(size(X)[1]))
     return K
 end
 
@@ -46,7 +48,8 @@ function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractA
     pairwise!(s, buf, X, dims = 1)
     buf .= k.k.(buf, θ[1], θ[2])
 
-    @views buf[diagind(buf)] .+= max(T(exp(-15.)), θ[4])
+    δ = max(exp(-15), θ[4])
+    @views buf[diagind(buf)] .+= δ # max(T(exp(-15.)), θ[4])
     lf = θ[3] # linear kernel component weight
 
     # Linear component only sees first nXlinear dimensions of X
@@ -67,12 +70,12 @@ function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractA
     end
 end
 
+
 function kernel_matrix_fast!(k::AnalyticKernel, θ::AbstractVector{T},
                              X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
     k_pred = UnaryKernel(Matern32, T[], size(X)[2])
     kernel_matrix_fast!(k_pred, θ, X, buf, outbuf; precision)
 end
-
 
 
 """Compute kernel matrix K for binary kernels, or if precision == true,
@@ -90,7 +93,8 @@ function kernel_matrix_fast!(k::BinaryKernel, θ::AbstractVector{T}, X::Abstract
     end
 
     # Add nugget
-    buf[diagind(buf)] .+= max(exp(-15.), θ[end])
+    δ = max(exp(-15), exp(logθ[4]))
+    buf[diagind(buf)] .+= δ
 
     if precision
         L = cholesky!(buf)
