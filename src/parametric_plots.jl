@@ -60,17 +60,20 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
     nYCCA = MVM.G.Yproj.spec.nCCA
     nYPCA = MVM.G.Yproj.spec.nPCA
 
-    m = splitrange(1, length(MVM.Ms[1].ρ_values), 1000)
+    r = length(MVM.Ms[1].ρ_values)
+    m = r > 1000 ? splitrange(1, r, 1000) : 1:r
 
     xlabels1 = ["CC $i (w=$(round(MVM.G.Yproj.values[i], sigdigits=2)))" for i in 1:nYCCA]
     xlabels2 = ["PC $i (w=$(round(MVM.G.Yproj.values[i+nYCCA], sigdigits=2)))" for i in 1:nYPCA]
     xl = [xlabels1..., xlabels2...]
 
-    p == nothing && (p = Plots.plot(layout = grid(3, nY, heights = [0.4, 0.4, 0.2]), size = (2400, 800), plot_title = title)) # , link = :both)
+    p == nothing && (p = Plots.plot(layout = grid(3, nY, heights = [0.4, 0.4, 0.2]),
+                                    size = (2400, 800), plot_title = title)) # , link = :both)
 
     for i in 1:3nY
         # no y tick labels for columns >1
-        (i-1)%nY > 0 && Plots.plot!(p[i], yformatter = _ -> "", right_margin = -4mm, left_margin = -4mm)
+        (i-1)%nY > 0 && Plots.plot!(p[i], yformatter = _ -> "",
+                                    right_margin = -4mm, left_margin = -4mm)
         i > nY && Plots.plot!(p[i], top_margin = -6mm)
         i < nY && Plots.plot!(p[i], bottom_margin = -6mm)
     end
@@ -81,8 +84,11 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
         nXCCA = MVM.G.Xprojs[i].spec.nCCA # number of X CCA vectors for this Y dim
         Plots.plot!(p[i], λs[1:nXCCA,:]', legend = false, xformatter = _ -> "")
         Plots.plot!(p[i], λs[nXCCA+1:end,:]', legend = false, color = "gray", alpha = .2)
-        Plots.plot!(p[i+nY], log.(hcat(M.θ_training...)[:,m]'), legend = false, xformatter = _ -> "", top_margin = 0mm)
-        Plots.plot!(p[i+2nY], log.(M.ρ_values[m]), legend = false, xlabel = xl[i], top_margin = 0mm)
+        Plots.plot!(p[i+nY], log.(hcat(M.θ_training...)[:,m]'),
+                    legend = false, xformatter = _ -> "", top_margin = 0mm)
+
+        Plots.plot!(p[i+2nY], log.(M.ρ_values[m]), legend = false,
+                    xlabel = xl[i], top_margin = 0mm)
     end
 
     niter_tot = length(MVM.Ms[1].ρ_values)
@@ -106,34 +112,39 @@ function pl!(p, x::Vector{T}, y::Vector{T}, y_pred::Vector{T};
 end
 
 using Makie
+
 function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::AbstractMatrix{T};
                           diff = false, origspace = false, plot_dummyXdims::Bool = true,
                           Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing,
-                          Xtransfs = ones(Int, size(X_te)[1])) where T <: Real
+                          Xtransfs = ones(Int, size(X_te)[2]), nYdims::Int = 0, nXdims::Int = 0) where T <: Real
 
-    xt = [identity, log, cosd, x -> cosd(x-90), x -> log(180-x)] # same as in VSWIREmulator.jl
+    # These are the same as in VSWIREmulator.jl
+    xt = [identity, log, cosd, x -> cosd(x-90), x -> log(180-x)]
     X_te = X_te[:,:]
     for (i,t) in enumerate(Xtransfs)
         X_te[:,i] .= xt[t].(X_te[:,i])
     end
 
     ZY_te_pred = (Y_te_pred == nothing) ?  predict(MVM, X_te; recover_outputs = false) : reduce_Y(Y_te_pred, MVM.G)
+
     ZY_te = reduce_Y(Y_te, MVM.G)
 
     nY = size(ZY_te_pred)[2]
-    nX = plot_dummyXdims ? length(MVM.G.Xprojs[1].spec.sparsedims) : nXl(MVM, 1)
+    nX = plot_dummyXdims ? length(MVM.G.Xprojs[1].spec.sparsedims) : MVM.G.Xprojs[1].spec.nCCA + MVM.G.Xprojs[1].spec.nPCA
     nX = origspace ? size(X_te)[2] : nX
-    # nX_max = maximum(nX)
+
+    nX = nXdims == 0 ? nX : min(nX, nXdims)
+    nY = nYdims == 0 ? nY : min(nY, nYdims)
 
     f = Figure(size = (3200, 3200))
     axes = [[Axis(f[i,j]) for i in 1:nY] for j in 1:nX]
     # p = plot(layout = (nY, nX), size = (3200,2000), top_margin = -6mm)
-    display(axes)
 
-    for (i,M) ∈ enumerate(MVM.Ms)
+    for i in 1:nY
+        M = MVM.Ms[i]
         ZX_te = origspace ? X_te : reduce_X(X_te, MVM.G, i)
-        for j ∈ 1:nX
-            println(i, " ", j)
+        for j in 1:nX
+            print("\r$i, $j")
             !diff && Makie.scatter!(axes[j][i], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, legend = false, alpha=.3, strokewidth = 1)
             pl!(axes[j][i], ZX_te[:,j], ZY_te[:,i], ZY_te_pred[:,i]; diff)
             if i < nY
