@@ -17,106 +17,71 @@
 export get_kernels
 
 abstract type Kernel end
+abstract type AutodiffKernel <: Kernel end
 
-mutable struct UnaryKernel{T} <: Kernel
+mutable struct UnaryKernel{T} <: AutodiffKernel
     k::Function # kernel function
     θ_start::Vector{T}
     nXlinear::Int
 end
 
-mutable struct BinaryKernel{T} <: Kernel
+mutable struct BinaryKernel{T} <: AutodiffKernel
     k::Function # kernel function
     θ_start::Vector{T}
 end
 
-
-# For UnaryKernel, first parameter (a / θ[1]) is always weight of the
-# component, second (b / θ[2]) is the length scale.
-
-spherical_sqexp(d::T, a::T, b::T) where T <: Real = a * exp(T(-.5)*d*d / b)
-spherical_sqexp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_sqexp(d, θ[1], θ[2])
-
-spherical_exp(d::T, a::T, b::T) where T <: Real = a * exp(-d / b)
-spherical_exp(d::T; θ::AbstractVector{T}) where T <: Real = spherical_exp(d, θ[1], θ[2])
-
-function Matern32(d::T, a::T, b::T) where T <: Real
-    h = sqrt(T(3.)) * d / b # d is Euclidean distance
-    a * (one(T) + h) * exp(-h)
-end
-Matern32(d::T; θ::AbstractVector{T}) where T <: Real = Matern32(d, θ[1], θ[2])
-
-function Matern52(d::T, a::T, b::T) where T <: Real
-    h = sqrt(T(5.)) * d / b
-    a * (T(1.) + h + h^2 / T(3.)) * exp(-h)
-end
-Matern52(d::T; θ::AbstractVector{T}) where T <: Real = Matern52(d, θ[1], θ[2])
-
-function inverse_quadratic(d::T, a::T, b::T) where T <: Real
-    a / sqrt(d^2 + b)
-end
-inverse_quadratic(d::T; θ::AbstractVector{T}) where T <: Real = inverse_quadratic(d, θ[1], θ[2])
-
-
-"""Linear kernel (with mean) for testing BinaryKernel
-correctness. This kernel also includes the mean, which is given as the
-log of the θ, since θ are always positive. θ[1] is the weight of the
-kernel, and θ[end] is the weight of the nugget (this is always the
-case). Therefore we have n+2 parameters for this kernel, with n the
-number of input dimensions."""
-function linear_mean(x1::AbstractVector{T}, x2::AbstractVector{T},
-                     θ::AbstractVector{T}) where T <: Real
-    # Note that kernel_matrix_...() functions do not pass along the
-    # last entry of θ, as that's always the nugget. Hence the θ here
-    # is only n+1 entries long, not n+1 like in BinaryKernel.θ_start
-    μ = log.(θ[2:end])
-
-    θ[1] * (x1 - μ)' * (x2 - μ)
+"""Kernel to be used without autodiff"""
+mutable struct AnalyticKernel{T} <: Kernel
+    K_and_∂K∂logα!::Function # returns K and its gradients
+    θ_start::Vector{T}
 end
 
-"""Linear binary kernel, but without mean"""
-function linear(x1::AbstractVector{T}, x2::AbstractVector{T},
-                θ::AbstractVector{T}) where T <: Real
-    θ[1] * x1' * x2
-end
+include("kernel_functions_unary.jl")
+include("kernel_functions_binary.jl")
+include("kernel_functions_analytic.jl")
 
 
-function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
-
-    unary_kernels =  [:spherical_sqexp, :spherical_exp,
-                      :Matern32, :Matern52, :inverse_quadratic]
-    binary_kernels = [:linear, :linear_mean]
-
+function get_UnaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:spherical_sqexp => spherical_sqexp,
              :spherical_exp => spherical_exp,
              :inverse_quadratic => inverse_quadratic,
-             :Matern32 => Matern32, :Matern52 => Matern52,
-             :linear => linear, :linear_mean => linear_mean)
+             :Matern32 => Matern32,
+             :Matern52 => Matern52)
+    # Initial θ for UnaryKernels
+    θ₀_U = T.(exp.([0., 0., 0., -12.]))
+    return [UnaryKernel(d[s], θ₀_U, length(XP.values)) for XP in G.Xprojs]
+end
 
-    # Function for getting initial θ for BinaryKernels
-    function get_binary_θs(s::Symbol, G::GPGeometry{T}) where T <: Real
-        if s  == :linear
-            θ₀list = [exp.([0., -7.]) for XP in G.Xprojs]
-        elseif s == :linear_mean
-            # get number of transformed X dims, plus nugget and weight
-            nθs = [length(XP.spec.sparsedims) + 2 for XP in G.Xprojs]
-            θ₀list = [ones(T, nθ) for nθ in nθs]
-            for θ in θ₀list
-                θ[end] = exp(-7.0)
-            end
+function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
+    d = Dict(:linear => linear,
+             :linear_mean => linear_mean)
+    if s  == :linear
+        θ₀list = [exp.([0., -7.]) for XP in G.Xprojs]
+    elseif s == :linear_mean
+        # get number of transformed X dims, plus nugget and weight
+        nθs = [length(XP.spec.sparsedims) + 2 for XP in G.Xprojs]
+        θ₀list = [ones(T, nθ) for nθ in nθs]
+        for θ in θ₀list
+            θ[end] = exp(-7.0)
         end
-
-        return θ₀list
     end
+    return θ₀list
+end
 
-    if s in unary_kernels
-        θ₀_U = T.(exp.([0., 0., 0., -12.])) # initial θ for UnaryKernels
-        # klist = [UnaryKernel(d[s], θ₀_U, XP.spec.nCCA + length(XP.spec.sparsedims))
-        #          for XP in G.Xprojs]
-        klist = [UnaryKernel(d[s], θ₀_U, 0) for XP in G.Xprojs]
-    elseif s in binary_kernels
-        θ₀s = get_binary_θs(s, G)
-        klist = [BinaryKernel(d[s], θ₀) for θ₀ in θ₀s]
-    end
+function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
+    d = Dict(:Matern32_analytic => Matern32_αgrad!)
+    θ₀_U = T.(exp.([0., 0., 0., -12.]))
+    return [AnalyticKernel(d[s], θ₀_U) for XP in G.Xprojs]
+end
 
-    return klist
+function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
+
+    unary_kernels = [:spherical_sqexp, :spherical_exp,
+                     :Matern32, :Matern52, :inverse_quadratic]
+    binary_kernels = [:linear, :linear_mean]
+    analytic_kernels = [:Matern32_analytic]
+
+    s in unary_kernels && (return get_UnaryKernel(s,G))
+    s in binary_kernels && (return get_BinaryKernel(s,G))
+    s in analytic_kernels && (return get_AnalyticKernel(s,G))
 end

@@ -14,6 +14,8 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+
+
 function train!(MVM::MVGPModel{T};
                 ρ::Function = ρ_RMSE, ϵ::Real = .005, niter::Int = 500,
                 n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
@@ -70,4 +72,121 @@ function train!(MVMs::Vector{MVGPModel{T}};
     end
     println("done!")
 
+end
+
+
+"""Train the univariate MVM.Ms models together to minimize prediction
+error. Only uses with the analytic Matern32 loss for now. One should
+generally supply the Y_tr used for training, as the recovered
+dimension-reduced version is not exact."""
+function train_L2_together!(MVM::MVGPModel{T};
+                            Y_tr::Union{Nothing, AbstractMatrix{T}} = nothing,
+                            ϵ::Real = .005, niter::Int = 500,
+                            n::Int = 48, stepping::Symbol = :fixed,
+                            skip_K_update::Bool = false,
+                            predictonlycenter = true) where T <: Real
+
+    Random.seed!(1235)
+    ndata, nZdims = size(MVM.Ms[1].Z) # number of data and input dimensions
+    nMs = length(MVM.Ms)
+    κ = max(min(n÷5, 20),4)
+    nt = Threads.nthreads()
+    ylen = length(MVM.G.μY)
+    nλ = length(MVM.Ms[1].λ)
+    nα = nλ + 4
+    local ρ
+
+    bufsizes  = ((n,n), (n,n), (nα,), (n,), (n,), (n,), (n,n), (n,n),
+                 (n, nZdims), (nα,), (n,), (n,n), (n,n), (n,n))
+    Kgradsizes = [(n,n) for _ in 1:nα]
+    workbufs_all = [[zeros(T, bs) for bs in bufsizes] for i in 1:nt]
+    Kgrads_all = [[zeros(T, bs) for bs in Kgradsizes] for i in 1:nt]
+
+    all_s_rp = get_random_partitions(ndata, n, niter)
+    all_s_rp = collect(eachrow(all_s_rp))
+
+    ybuf1 = zeros(T, ylen)
+    ybuf2 = zeros(T, ylen)
+
+    logα_tot = log.(vcat([vcat(M.λ, M.θ) for M in MVM.Ms]...))
+    ∇logα = similar(logα_tot)
+
+    # Each GPModel predicts a scalar for each LOO obsevation
+    allpreds = zeros(κ, nMs)
+    # For each left-out observation there are nMs nα-size gradients
+    allgrads = zeros(nα, nMs, κ)
+
+    for k ∈ 1:niter
+        s = all_s_rp[k]
+        s_LOO = randperm(n)[1:κ] # The minibatch that we predict
+
+        # Threads.@threads :static
+        for j in 1:nMs # for each scalar model
+            tid = Threads.threadid()
+            M = MVM.Ms[j] # shortand
+            logα = logα_tot[(j-1)*nα+1:j*nα]
+            Z = @views M.Z[s,:] ./ M.λ' .* exp.(logα[1:nλ])' # GP inputs
+            ζ = M.ζ[s] # GP outputs
+
+            # Get predicted GP components, which are then collected
+            # together, and used after the for-loop.
+            (preds, grads) = ρ_RMSE(Z, ζ, M.kernel, logα,
+                                    workbufs_all[tid], Kgrads_all[tid];
+                                    s_LOO = s_LOO, return_components = true)
+            allgrads[:,j,:] .= grads
+            allpreds[:,j] .= preds
+        end
+
+        Y_LOO = Y_tr == nothing ? recover_Y(hcat([M.ζ[s_LOO] for M in MVM.Ms]...), MVM.G) : Y_tr[s[s_LOO],:]
+
+        Y_LOO .-= MVM.G.μY'
+
+        ∇logα .= 0
+        for j in 1:κ
+            ybuf1 .= -Y_LOO[j,:] # ./ MVM.G.σY
+            for i in 1:nMs
+                # ybuf1 gets 2 x residual in original space
+                vec = @view MVM.G.Yproj.vectors[:,i]
+                val = MVM.G.Yproj.values[i]
+                ybuf1 .+= 2. * val * allpreds[j,i] * vec # .* MVM.G.σY
+            end
+            # ybuf1 .-= MVM.G.μY #  Y_LOO[j,:]
+
+
+            for l in 1:nα
+                # ybuf2 .= 0.0 # This will have the gradient parts
+                for i in 1:nMs
+                    vec = @view MVM.G.Yproj.vectors[:,i]
+                    val = MVM.G.Yproj.values[i]
+                    ybuf2 .= val * allgrads[l,i,j] * vec # .* MVM.G.σY
+                    ∇logα[(i-1)*nα+l] += dot(ybuf1, ybuf2)
+                end
+            end
+        end
+
+        gn(g) = sqrt(sum(g.^2)) + 1e-9
+
+        b = stepping == :fixed ? ϵ * ∇logα  / gn(∇logα) : ϵ * ∇logα
+        logα_tot .-= b
+
+        ρ = dot(ybuf1, ybuf1) / 4.0 # negate the 2 above. This is the squared residual.
+
+        for i in 1:nMs
+            M = MVM.Ms[i]
+            push!(M.ρ_values, ρ)
+            newλ = exp.(logα_tot[nα*(i-1)+1:i*nα-4])
+            push!(M.λ_training, newλ)
+            newθ = exp.(logα_tot[i*nα-3:i*nα])
+            push!(M.θ_training, newθ)
+        end
+    end
+    # Save results
+    Threads.@threads for M in MVM.Ms
+        skip_K_update || update_GPModel!(M; newλ = M.λ_training[end], newθ = M.θ_training[end])
+    end
+
+    # display(allgrads)
+
+    return ybuf1, ybuf2
+    MVM
 end

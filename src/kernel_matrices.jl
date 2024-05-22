@@ -67,6 +67,13 @@ function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractA
     end
 end
 
+function kernel_matrix_fast!(k::AnalyticKernel, θ::AbstractVector{T},
+                             X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
+    k_pred = UnaryKernel(Matern32, T[], size(X)[2])
+    kernel_matrix_fast!(k_pred, θ, X, buf, outbuf; precision)
+end
+
+
 
 """Compute kernel matrix K for binary kernels, or if precision == true,
    its inverse. Not autodifferentiable, used for predictions"""

@@ -74,10 +74,6 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
     Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernels[i];
                   λ = λs[i], θ = θs[i], transform_zy) for i ∈ 1:nZYdims]
 
-    for M in Ms
-        M.kernel.nXlinear = size(M.Z)[2]
-    end
-
     return MVGPModel(Ms, G)
 end
 

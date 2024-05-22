@@ -81,6 +81,14 @@ function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
             workbuf[i,j] = @views k.k(X1[i,:], X2[j,:], θ[1:end-1])
         end
     end
+end
 
 
+"""Use the regular Matern32 covariance function for prediction"""
+function cross_covariance_matrix!(k::AnalyticKernel, θ::AbstractVector{T},
+                                  X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                                  workbuf1::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
+
+    k_pred = UnaryKernel(Matern32, T[], size(X1)[2])
+    cross_covariance_matrix!(k_pred, θ, X1, X2, workbuf1, workbuf2)
 end

@@ -45,6 +45,11 @@ function save_kernel(U::UnaryKernel, G::JLD2.Group)
     G["theta_start"] = U.θ_start
 end
 
+function save_kernel(U::AnalyticKernel, G::JLD2.Group)
+    G["K_and_∂K∂logα!"] = string(U.K_and_∂K∂logα!)
+    G["theta_start"] = U.θ_start
+end
+
 
 """Load UnaryKernel kernel from a JLD2.Group. Other types of kernels
 need other implementations, choosing between which then needs to be
@@ -54,7 +59,8 @@ function load_kernel(G::JLD2.Group)
                        "Matern52" => Matern52,
                        "inverse_quadratic" => inverse_quadratic,
                        "spherical_exp" => spherical_exp,
-                       "spherical_sqexp" => spherical_sqexp)
+                       "spherical_sqexp" => spherical_sqexp,
+                       "Matern32_αgrad!" => Matern32_analytic)
 
     k = kerneltable[G["k"]]
     nXlinear = G["nXlinear"]
