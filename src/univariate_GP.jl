@@ -107,6 +107,12 @@ function update_GPModel!(M::GPModel{T};
 end
 
 
+"""Convenience function to obtain logα from a GPModel{T}"""
+function get_logα(M::GPModel{T}) where T <: Real
+    log.(vcat(M.λ, M.θ))
+end
+
+
 """Any kernel-specific code that's needed for sparsifying inputs can
 be implemented here. The default function does nothing"""
 function sparsify_inputs_hook(::Kernel, M::GPModel, newdims::Vector{Int}) end

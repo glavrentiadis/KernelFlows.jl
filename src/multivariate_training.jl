@@ -17,15 +17,14 @@
 
 
 function train!(MVM::MVGPModel{T};
-                ρ::Function = ρ_RMSE, ϵ::Real = .005, niter::Int = 500,
-                n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
+                ρ::Function = ρ_RMSE,
+                optalg::Symbol = :AMSGrad,
+                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
+                niter::Int = 500, n::Int = 32,
+                quiet::Bool = false,
                 navg::Union{Nothing, Int} = nothing,
                 ζcomps::AbstractVector{Int} = 1:length(MVM.Ms),
-                skip_K_update::Bool = false,
-                stepping::Symbol = :standard,
-                inertia::Int = 0) where T <: Real
-
-    ϵ = T(ϵ)
+                skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
     if !quiet
         println("Initial scaling factors (log):")
@@ -36,8 +35,8 @@ function train!(MVM::MVGPModel{T};
     end
 
     Threads.@threads :static for k ∈ ζcomps
-        train!(MVM.Ms[k]; ρ, ϵ, niter, n, ngridrounds, navg,
-               skip_K_update = true, quiet, stepping, inertia)
+        train!(MVM.Ms[k]; ρ, optalg, optargs, niter, n, navg,
+               quiet, skip_K_update = true)
     end
 
     if !quiet
@@ -56,19 +55,19 @@ end
 
 
 function train!(MVMs::Vector{MVGPModel{T}};
-                ρ::Function = ρ_RMSE, ϵ::Real = .005, niter::Int = 500,
-                n::Int = 32, ngridrounds::Int = 0, quiet::Bool = false,
+                ρ::Function = ρ_RMSE,
+                optalg::Symbol = :AMSGrad,
+                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
+                niter::Int = 500,
+                n::Int = 32, quiet::Bool = false,
                 navg::Union{Nothing, Int} = nothing,
-                skip_K_update::Bool = false,
-                stepping::Symbol = :standard,
-                inertia::Int = 0) where T <: Real
-    ϵ = T(ϵ)
+                skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
     Mlist = [M for MVM in MVMs for M in MVM.Ms]
     println("Training $(length(Mlist)) GPs...")
     Threads.@threads :static for M in Mlist
-        train!(M; ρ, ϵ, niter, n, ngridrounds, navg,
-               skip_K_update, quiet, stepping, inertia)
+        train!(M; ρ, optalg, optargs, niter, n, navg,
+               skip_K_update, quiet)
     end
     println("done!")
 
@@ -81,10 +80,9 @@ generally supply the Y_tr used for training, as the recovered
 dimension-reduced version is not exact."""
 function train_L2_together!(MVM::MVGPModel{T};
                             Y_tr::Union{Nothing, AbstractMatrix{T}} = nothing,
-                            ϵ::Real = .005, niter::Int = 500,
-                            n::Int = 48, stepping::Symbol = :fixed,
-                            skip_K_update::Bool = false,
-                            predictonlycenter = true) where T <: Real
+                            optalg::Symbol = :AMSGrad,
+                            optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
+                            niter::Int = 500, n::Int = 64, skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
     Random.seed!(1235)
     ndata, nZdims = size(MVM.Ms[1].Z) # number of data and input dimensions
@@ -115,6 +113,8 @@ function train_L2_together!(MVM::MVGPModel{T};
     allpreds = zeros(κ, nMs)
     # For each left-out observation there are nMs nα-size gradients
     allgrads = zeros(nα, nMs, κ)
+
+    O = get_optimizer(optalg, logα_tot; optargs...)
 
     for k ∈ 1:niter
         s = all_s_rp[k]
@@ -164,10 +164,7 @@ function train_L2_together!(MVM::MVGPModel{T};
             end
         end
 
-        gn(g) = sqrt(sum(g.^2)) + 1e-9
-
-        b = stepping == :fixed ? ϵ * ∇logα  / gn(∇logα) : ϵ * ∇logα
-        logα_tot .-= b
+        logα_tot .= iterate!(O, ∇logα)
 
         ρ = dot(ybuf1, ybuf1) / 4.0 # negate the 2 above. This is the squared residual.
 
