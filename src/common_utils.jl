@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, kernel_matrix, kernel_matrix_fast, deciles, split_training_and_testing
+export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, kernel_matrix, kernel_matrix_fast, deciles, split_data
 
 using LinearAlgebra
 using Random
@@ -32,32 +32,43 @@ points given by nodes. Start and stop are always included."
 function splitrange(start::Int, stop::Int, nodes::Int)
     n = stop - start
     r = nodes >= stop - start ? Vector(start:stop) : (n .* Vector(0:nodes) .÷ nodes) .+ start
-
 end
 
 
 """Split inputs X and outputs Y randomly into training and
 testing. The number of points in testing is given by kwarg nte. Random
 seed can be fixed for reproducibility."""
-function split_training_and_testing(X::Matrix{T}, Y::Matrix{T}; nte::Int = 500,
-                                    seed::UInt = rand(UInt)) where T <: Real
-    Random.seed!(seed)
-    ndata = size(X)[1]
-    s = randperm(ndata)
-    s_tr = s[1:ndata-nte]
-    s_te = s[ndata-nte+1:ndata]
+function split_data(X::Matrix{T}, Y::Matrix{T}; nte::Int = 500,
+                    seed::UInt = rand(UInt)) where T <: Real
+    s_tr, s_te = randomsplit(size(X)[1], nte)
     X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
 end
 
 
-function split_training_and_testing(X::Matrix{T}, Y_all::Vector{Matrix{T}};
-                                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
-    Random.seed!(seed)
-    ndata = size(X)[1]
-    s = randperm(ndata)
-    s_tr = s[1:ndata-nte]
-    s_te = s[ndata-nte+1:ndata]
+function split_data(X::Matrix{T}, Y_all::Vector{Matrix{T}};
+                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
+    s_tr, s_te = randomsplit(size(X)[1], nte)
     X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all]
+end
+
+function split_data(Zs::Vector{Matrix{T}};
+                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
+    s_tr, s_te = randomsplit(Zs[1], nte; seed)
+    [[Z[s_tr, :] for Z in Zs]..., [Z[s_te, :] for Z in Zs]...]
+end
+
+
+function randomsplit(nfull::Int, npart::Int; seed::UInt = rand(UInt))
+    Random.seed!(seed)
+    s = randperm(nfull)
+    s_te = s[1:npart]
+    s_tr = s[npart+1:end]
+    return s_tr, s_te
+end
+
+
+function randomsplit(X::AbstractArray, nte::Int; seed::UInt = rand(UInt))
+    randomsplit(size(X)[1], nte; seed)
 end
 
 
