@@ -63,7 +63,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
                    reg_CCA::Real = 1e-2, reg_CCA_X::Real = reg_CCA,
-                   maxdata::Int = 3000, scale_Y::Bool = true) where T <: Real
+                   maxdata::Int = 3000, scale_Y::Bool = false) where T <: Real
 
     X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
 
