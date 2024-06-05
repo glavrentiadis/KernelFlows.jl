@@ -54,8 +54,7 @@ function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractA
 
     # Linear component only sees first nXlinear dimensions of X
     XX = @views X[:,1:k.nXlinear]
-    ob = precision ? buf : outbuf
-    BLAS.gemm!('N', 'T', lf, XX, XX, one(T), ob)
+    BLAS.gemm!('N', 'T', lf, XX, XX, one(T), buf)
 
     if precision
         # Symmetrize: MKL gives 1e-17 rounding errors -> not PD
@@ -67,6 +66,8 @@ function kernel_matrix_fast!(k::UnaryKernel, θ::AbstractVector{T}, X::AbstractA
 
         L = cholesky!(buf)
         ldiv!(outbuf, L, UniformScaling(1.)(size(X)[1]))
+    else
+        outbuf .= buf
     end
 end
 
