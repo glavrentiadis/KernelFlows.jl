@@ -182,6 +182,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
         #     logα .+= Δ
         # end
 
+        flowres.ρ_values[i] = ρval
         push!(flowres.α_values, exp.(O.x))
     end
 
