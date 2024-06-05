@@ -31,7 +31,7 @@ end
 function AMSGrad(x_start::Vector{T};
                  ϵ::T = T(1e-3), β1::T = T(.9), β2::T = T(.999),
                  δ::T = T(1e-8)) where T <: Real
-    AMSGrad(x_start, similar(x_start), T(0), T(0), ϵ, β1, β2, δ)
+    AMSGrad(x_start, zero(x_start), T(0), T(0), ϵ, β1, β2, δ)
 end
 
 
