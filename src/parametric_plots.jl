@@ -87,8 +87,9 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
         Plots.plot!(p[i+nY], log.(hcat(M.θ_training...)[:,m]'),
                     legend = false, xformatter = _ -> "", top_margin = 0mm)
 
+        xlab = length(xl) > 0 ? xl[i] : ""
         Plots.plot!(p[i+2nY], log.(M.ρ_values[m]), legend = false,
-                    xlabel = xl[i], top_margin = 0mm)
+                        xlabel = xlab, top_margin = 0mm)
     end
 
     niter_tot = length(MVM.Ms[1].ρ_values)
