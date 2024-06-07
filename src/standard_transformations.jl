@@ -140,3 +140,103 @@ function gaussianize_transforms(y::Vector{T}; iqr = .99) where T <: Real
 
     return transf, invtransf
 end
+
+
+struct PiecewiseLinearMap{T}
+    nodes::Vector{T}
+    values::Vector{T}
+end
+
+
+"""Construct a map f s.t. f.(v) is roughly uniformly distributed."""
+function PiecewiseLinearMap(v::AbstractVector{T}; n::Int = 100) where T <: Real
+    vs = sort(v)
+    idx = splitrange(1, length(v), n-1)
+
+    values = zeros(T, n+2)
+    nodes = zeros(T, n+2)
+
+    nodes[2:end-1] = vs[idx]
+    values[2:end-1] = collect((1:n) ./ n)
+
+    # Also allow extrapolation
+    nodes[1] = -1e9
+    nodes[end] = 1e9
+    values[1] = values[2] - (values[3] - values[2]) / (nodes[3] - nodes[2]) * (nodes[2] - nodes[1])
+    values[end] = values[end-1] + (values[end-1] - values[end-2]) / (nodes[end-1] - nodes[end-2]) * (nodes[end] - nodes[end-1])
+
+    PiecewiseLinearMap(nodes, values)
+end
+
+
+function PiecewiseLinearMaps(M::Matrix{T}; n::Int = 100) where T <: Real
+    [PiecewiseLinearMap(v; n) for v in eachcol(M)]
+end
+
+
+function tr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
+    n = p.nodes
+    v = p.values
+    i = searchsortedfirst(n, x) - 1
+    return (v[i] * (1. - (x - n[i]) / (n[i+1] - n[i]))) + (v[i+1] * (1 - (n[i+1] - x) / (n[i+1] - n[i])))
+end
+
+
+function itr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
+    n = p.nodes
+    v = p.values
+    i = searchsortedfirst(v, x) - 1
+    return (n[i] * (1. - (x - v[i]) / (v[i+1] - v[i]))) + (n[i+1] * (1 - (v[i+1] - x) / (v[i+1] - v[i])))
+end
+
+
+function tr(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
+    [tr(P[i], v[i]) for v in 1:length(v)]
+end
+
+
+function itr(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
+    [itr(P[i], v[i]) for v in 1:length(v)]
+end
+
+
+function tr(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
+    ndata, nX = size(X)
+    res = similar(X)
+    for j in 1:nX
+        for i in 1:ndata
+            res[i,j] = tr(P[j], X[i,j])
+        end
+    end
+    res
+end
+
+
+function itr(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
+    ndata, nX = size(X)
+    res = similar(X)
+    for j in 1:nX
+        for i in 1:ndata
+            res[i,j] = itr(P[j], X[i,j])
+        end
+    end
+    res
+end
+
+
+"""Test invertibility of the PiecewiseLinearMap itr/tr functions."""
+function test_PiecewiseLinearMap(p::PiecewiseLinearMap{T}) where T
+    for i in 1:100
+        r = (rand() - .5) * 1000
+        println(KernelFlows.itr(P[1], KernelFlows.tr(P[1], r)) - r)
+    end
+end
+
+
+function test_PiecewiseLinearMap()
+    Y_tr = rand(1000,1000) # fake training data
+    P = PiecewiseLinearMaps(Y_tr)
+    Y_te = rand(2000,1000) # fake test data
+    h = maximum(abs.(KernelFlows.itr(P, KernelFlows.tr(P, Y_te)) - Y_te))
+    println("Maximum error from invertible transformations: $h")
+end
