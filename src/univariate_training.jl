@@ -81,10 +81,6 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
     nα = length(α)
     reg = T(1e-7)
 
-    # Keep a reference to the full data set
-    X_full = X
-    ζ_full = ζ
-
     # Reference Matern kernels for debugging. Uncomment:
     k_ref = UnaryKernel(Matern32, α[end-3:end], nλ)
 
@@ -129,7 +125,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
 
         # Recalculate tree every now and then; otherwise correct
         # observations are not picked
-        if i % 500 == 1 && minibatch_method in [:neighborhood,:hybrid]
+        if i % 100 == 1 && minibatch_method in [:neighborhood,:hybrid]
             Z .= X
             Z .*= exp.(O.x[1:nλ])'
             kernel_matrix_fast!(k, exp.(O.x[nλ+1:end]), Z, buf, Ω;
@@ -156,31 +152,12 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
         ρval, grad = ξ_and_∇ξ(k, X[s,:], ζ[s], O.x)
         iterate!(O, grad) # update parameters in O.x
 
-        # Debigging block if one wants to compare gradients from ξ_ref()
+        # Debugging block if one wants to compare gradients from ξ_ref()
         # ρval_ref, gr_ref = ξ_and_∇ξ(k_ref, X[s,:], ζ[s], logα)
         # println("Gradient ratio:")
         # display((gr ./ gr_ref)')
         # display(gr)
         # display(gr_ref)
-
-        # flowres.ρ_values[i] = ρval
-        # grad .= gr
-
-        # g .= grad == nothing ? zero(logα) : grad
-        # # g[isnan.(g)] .= 0 # does not really get triggered.
-
-        # # Gradient norm, avoid NaN's if zero grad
-        # gn(g) = sqrt(sum(g.^2)) + 1e-9
-
-        # # gradnorm = gn(g)
-        # b .= stepping == :fixed ? ϵ * g  / gn(g) : ϵ * g
-        # logα .-= b
-
-        # # Inertia in optimization
-        # if inertia > 0 && i > 2*inertia
-        #     Δ = (logα - log.(flowres.α_values[end-inertia]))/inertia/2
-        #     logα .+= Δ
-        # end
 
         flowres.ρ_values[i] = ρval
         push!(flowres.α_values, exp.(O.x))
