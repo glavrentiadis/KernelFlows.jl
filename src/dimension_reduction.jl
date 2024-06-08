@@ -100,6 +100,10 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     μX = mean(X, dims = 1)[:]
     μY = mean(Y, dims = 1)[:]
     σX = std(X, dims = 1)[:]
+
+    # Avoid NaNs for constant input dimensions (corner case)
+    σX[σX .== 0] .= 1.
+
     σY = scale_Y ? std(Y, dims = 1)[:] : ones(T, size(Y)[2])
 
     # Don't scale dimensions with zero variance to avoid NaNs
@@ -270,6 +274,7 @@ end
 function get_dummy_vectors(X::AbstractMatrix{T};
                            dummydims::AbstractVector{Int} = 1:size(X)[2]) where T <: Real
     values = @views std(X[:,dummydims], dims = 1)
+    values[values .== 0.] .= 1. # avoid NaNs when reducing constant dimensions
     vectors = zeros(size(X)[2], length(dummydims))
     for (i,d) in enumerate(dummydims)
         vectors[d,i] = 1
