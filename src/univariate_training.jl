@@ -41,15 +41,13 @@ function train!(M::GPModel{T};
                 navg::Union{Nothing, Int} = nothing, quiet::Bool = false,
                 skip_K_update::Bool = false) where {T<:Real,H<:Any}
 
-    α₀ = vcat(M.λ, M.θ)
+    logα = get_logα(M)
     nλ = length(M.λ)
     n = min(n, length(M.ζ))
 
     Z = M.Z ./ M.λ'
-    O = get_optimizer(optalg, similar(α₀); optargs)
-
-    flowres = flow(Z, M.ζ, ρ, M.kernel, α₀; n, niter, O, quiet)
-
+    O = get_optimizer(optalg, similar(logα); optargs)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; n, niter, O, quiet)
 
     if niter > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -70,19 +68,19 @@ end
 """Function to do the actual 1-d learning. This does not depend on
 GPModel; that way it is more generally usable."""
 function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
-              ρ::Function, k::Kernel, α::Vector{T};
+              ρ::Function, k::Kernel, logα::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
-              O::AbstractOptimizer = AMSGrad(log.(α)),
+              O::AbstractOptimizer = AMSGrad(logα),
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
     ndata, nλ = size(X) # number of input dimensions
-    O.x .= log.(α) # set initial value, optimization in log space
-    nα = length(α)
+    O.x .= logα # set initial value, optimization in log space
+    nα = length(logα)
     reg = T(1e-7)
 
     # Reference Matern kernels for debugging. Uncomment:
-    k_ref = UnaryKernel(Matern32, α[end-3:end], nλ)
+    k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)
 
     ξ(k::AutodiffKernel, X, ζ, logα) =
         ρ_RMSE(X .* exp.(logα[1:nλ]'), ζ, k, logα[end-3:end]) +
@@ -106,12 +104,16 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
     # minibatch_method = :randompartitions
     minibatch_method = :hybrid
 
-    # Divide by 2 as we take data from both neighborhood and globally
-    n = minibatch_method == :hybrid ? n ÷ 2 : n
+    # How many (center, random) points we take in a minibatch:
+    d_n = Dict(:neighborhood => (n, 0),
+               :hybrid => (min(n÷2, 96), n - min(n÷2, 96)),
+               :randompartitions => (0, n))
+
+    (nc, nr) = d_n[minibatch_method]
 
     # minibatches
     if minibatch_method in [:randompartitions, :hybrid]
-        all_s_rp = get_random_partitions(ndata, n, niter)
+        all_s_rp = get_random_partitions(ndata, nr, niter)
         all_s_rp = collect(eachrow(all_s_rp))
     end
     if minibatch_method in [:neighborhood, :hybrid]
@@ -141,14 +143,14 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
         if minibatch_method in [:randompartitions, :hybrid]
             push!(s, all_s_rp[i]...)
         end
+
         if minibatch_method in [:neighborhood, :hybrid]
             l = rand(1:ndata)
-            choices = setdiff(1:ndata,s)
-            push!(s, sample(choices, Weights(Ω[choices,l]), n, replace = false)...)
+            choices = setdiff(1:ndata,s) # don't re-select points already in s
+            push!(s, sample(choices, Weights(Ω[choices,l]), nc, replace = false)...)
         end
 
         s = unique(s)
-
         ρval, grad = ξ_and_∇ξ(k, X[s,:], ζ[s], O.x)
         iterate!(O, grad) # update parameters in O.x
 

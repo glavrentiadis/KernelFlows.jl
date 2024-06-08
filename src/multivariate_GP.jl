@@ -78,6 +78,11 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
 end
 
 
+"""Return log(α) for all GPModels in an MVGPModel, concatenated."""
+function get_logα(MVM::MVGPModel{T}) where T <: Real
+    vcat([get_logα(M) for M in MVM.Ms])
+end
+
 
 """Apply standard transformations and dimension reduction as described
 in GPGeometry object in G. This function scales the inputs according
