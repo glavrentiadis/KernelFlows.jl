@@ -149,15 +149,26 @@ end
 
 
 """Construct a map f s.t. f.(v) is roughly uniformly distributed."""
-function PiecewiseLinearMap(v::AbstractVector{T}; n::Int = 100) where T <: Real
+function PiecewiseLinearMap(v::AbstractVector{T}; n::Int = 100, mapping::Symbol = :uniform) where T <: Real
     vs = sort(v)
     idx = splitrange(1, length(v), n-1)
 
     values = zeros(T, n+2)
     nodes = zeros(T, n+2)
-
     nodes[2:end-1] = vs[idx]
-    values[2:end-1] = collect((1:n) ./ n)
+
+    if mapping == :uniform
+        values[2:end-1] = collect((1:n) ./ n)
+    elseif mapping == :gaussian
+        v = collect((.5:1:n-.5) ./ n)
+        v = invlogcdf(Normal(), log.(v))
+        values[2:end-1] = v
+    elseif mapping == :log
+        values[2:end-1] = log.(collect((1:n) ./ n))
+    # Decreasing transformations do not work currently
+    # elseif mapping == :reciprocal
+    #     values[2:end-1] = 1. ./ (collect((1:n) ./ n))
+    end
 
     # Also allow extrapolation
     nodes[1] = -1e9
@@ -169,8 +180,8 @@ function PiecewiseLinearMap(v::AbstractVector{T}; n::Int = 100) where T <: Real
 end
 
 
-function PiecewiseLinearMaps(M::Matrix{T}; n::Int = 100) where T <: Real
-    [PiecewiseLinearMap(v; n) for v in eachcol(M)]
+function PiecewiseLinearMaps(M::Matrix{T}; n::Int = 100, mapping::Symbol = :uniform) where T <: Real
+    [PiecewiseLinearMap(v; n, mapping) for v in eachcol(M)]
 end
 
 
@@ -235,7 +246,7 @@ end
 
 function test_PiecewiseLinearMap()
     Y_tr = rand(1000,1000) # fake training data
-    P = PiecewiseLinearMaps(Y_tr)
+    P = PiecewiseLinearMaps(Y_tr; mapping = :gaussian)
     Y_te = rand(2000,1000) # fake test data
     h = maximum(abs.(KernelFlows.itr(P, KernelFlows.tr(P, Y_te)) - Y_te))
     println("Maximum error from invertible transformations: $h")

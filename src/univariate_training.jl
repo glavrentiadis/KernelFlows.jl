@@ -16,7 +16,7 @@
 #
 
 struct FlowRes{T}
-    s_values::Vector{Vector{Int}} # indexes of the minibatch in X_full
+    s_values::Vector{Vector{Int}} # indexes of the minibatch in X
     ρ_values::Vector{T} # loss function values
     α_values::Vector{Vector{T}} # scaling and kernel parameters and nugget
 end

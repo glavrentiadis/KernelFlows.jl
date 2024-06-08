@@ -14,6 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+
 """Polynomial correction of mean. Sometimes, after GP has been fitted,
 the prediction bias is not a random function of the inputs but rather
 there is a pattern. If so, a function can be fitted to just remove
