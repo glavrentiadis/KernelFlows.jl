@@ -117,10 +117,10 @@ using Makie
 function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::AbstractMatrix{T};
                           diff = false, origspace = false, plot_dummyXdims::Bool = true,
                           Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing,
-                          Xtransfs = ones(Int, size(X_te)[2]), nYdims::Int = 0, nXdims::Int = 0) where T <: Real
+                          Xtransfs = ones(Int, size(X_te)[2]), nYdims::Int = 0, nXdims::Int = 0, offset::Int = 0) where T <: Real
 
     # These are the same as in VSWIREmulator.jl
-    xt = [identity, log, cosd, x -> cosd(x-90), x -> log(180-x)]
+    xt = [identity, log, cosd, x -> cosd(x-90), x -> log(180-x), exp, sqrt, x -> sign(x) * x^2]
     X_te = X_te[:,:]
     for (i,t) in enumerate(Xtransfs)
         X_te[:,i] .= xt[t].(X_te[:,i])
@@ -141,19 +141,20 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
     axes = [[Axis(f[i,j]) for i in 1:nY] for j in 1:nX]
     # p = plot(layout = (nY, nX), size = (3200,2000), top_margin = -6mm)
 
-    for i in 1:nY
+    for i in offset + 1:offset + nY
+        k = i - offset
         M = MVM.Ms[i]
         ZX_te = origspace ? X_te : reduce_X(X_te, MVM.G, i)
         for j in 1:nX
             print("\r$i, $j")
-            !diff && Makie.scatter!(axes[j][i], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, legend = false, alpha=.3, strokewidth = 1)
-            pl!(axes[j][i], ZX_te[:,j], ZY_te[:,i], ZY_te_pred[:,i]; diff)
-            if i < nY
-                hidexdecorations!(axes[j][i], grid = false)
-                linkxaxes!(axes[j][i], axes[j][nY])
+            !diff && Makie.scatter!(axes[j][k], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, legend = false, alpha=.3, strokewidth = 1)
+            pl!(axes[j][k], ZX_te[:,j], ZY_te[:,k], ZY_te_pred[:,k]; diff)
+            if i - offset < nY
+                hidexdecorations!(axes[j][k], grid = false)
+                linkxaxes!(axes[j][k], axes[j][nY])
             end
-            if (j > 1) hideydecorations!(axes[j][i], grid = false)
-                linkyaxes!(axes[j][i], axes[1][i])
+            if (j > 1) hideydecorations!(axes[j][k], grid = false)
+                linkyaxes!(axes[j][k], axes[1][k])
             end
         end
     end
