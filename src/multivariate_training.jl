@@ -63,14 +63,8 @@ function train!(MVMs::Vector{MVGPModel{T}};
                 navg::Union{Nothing, Int} = nothing,
                 skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
-    Mlist = [M for MVM in MVMs for M in MVM.Ms]
-    println("Training $(length(Mlist)) GPs...")
-    Threads.@threads :static for M in Mlist
-        train!(M; ρ, optalg, optargs, niter, n, navg,
-               skip_K_update, quiet)
-    end
-    println("done!")
-
+    Ms = [M for MVM in MVMs for M in MVM.Ms]
+    train!(Ms; optalg, optargs, niter, n, navg, skip_K_update, quiet)
 end
 
 

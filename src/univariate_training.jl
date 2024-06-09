@@ -65,6 +65,27 @@ function train!(M::GPModel{T};
 end
 
 
+function train!(Ms::Vector{GPModel{T}};
+                optalg::Symbol = :AMSGrad,
+                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
+                ρ::Function = ρ_RMSE, niter::Int = 500, n::Int = 48,
+                navg::Union{Nothing, Int} = nothing, quiet::Bool = false,
+                skip_K_update::Bool = false) where {T<:Real,H<:Any}
+
+    nM = length(Ms)
+    println("Training $nM GPs...")
+    computed = zeros(Int, Threads.nthreads())
+    print("\rCompleted $(sum(computed)) of $nM tasks ")
+
+    Threads.@threads for M in Ms
+        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update, quiet)
+        computed[Threads.threadid()] += 1
+        print("\rCompleted $(sum(computed)) of $nM tasks ")
+    end
+    println("done!")
+end
+
+
 """Function to do the actual 1-d learning. This does not depend on
 GPModel; that way it is more generally usable."""
 function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
