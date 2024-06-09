@@ -185,7 +185,7 @@ function PiecewiseLinearMaps(M::Matrix{T}; n::Int = 100, mapping::Symbol = :unif
 end
 
 
-function tr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
+function tr_fwd(p::PiecewiseLinearMap{T}, x::T) where T <: Real
     n = p.nodes
     v = p.values
     i = searchsortedfirst(n, x) - 1
@@ -193,7 +193,7 @@ function tr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
 end
 
 
-function itr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
+function tr_inv(p::PiecewiseLinearMap{T}, x::T) where T <: Real
     n = p.nodes
     v = p.values
     i = searchsortedfirst(v, x) - 1
@@ -201,34 +201,34 @@ function itr(p::PiecewiseLinearMap{T}, x::T) where T <: Real
 end
 
 
-function tr(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
-    [tr(P[i], v[i]) for v in 1:length(v)]
+function tr_fwd(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
+    [tr_fwd(P[i], v[i]) for v in 1:length(v)]
 end
 
 
-function itr(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
-    [itr(P[i], v[i]) for v in 1:length(v)]
+function tr_inv(P::Vector{PiecewiseLinearMap{T}}, v::Vector{T}) where T
+    [tr_inv(P[i], v[i]) for v in 1:length(v)]
 end
 
 
-function tr(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
+function tr_fwd(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
     ndata, nX = size(X)
     res = similar(X)
     for j in 1:nX
         for i in 1:ndata
-            res[i,j] = tr(P[j], X[i,j])
+            res[i,j] = tr_fwd(P[j], X[i,j])
         end
     end
     res
 end
 
 
-function itr(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
+function tr_inv(P::Vector{PiecewiseLinearMap{T}}, X::Matrix{T}) where T
     ndata, nX = size(X)
     res = similar(X)
     for j in 1:nX
         for i in 1:ndata
-            res[i,j] = itr(P[j], X[i,j])
+            res[i,j] = tr_inv(P[j], X[i,j])
         end
     end
     res
@@ -239,7 +239,7 @@ end
 function test_PiecewiseLinearMap(p::PiecewiseLinearMap{T}) where T
     for i in 1:100
         r = (rand() - .5) * 1000
-        println(KernelFlows.itr(P[1], KernelFlows.tr(P[1], r)) - r)
+        println(tr_inv(P[1], tr_fwd(P[1], r)) - r)
     end
 end
 
@@ -248,6 +248,6 @@ function test_PiecewiseLinearMap()
     Y_tr = rand(1000,1000) # fake training data
     P = PiecewiseLinearMaps(Y_tr; mapping = :gaussian)
     Y_te = rand(2000,1000) # fake test data
-    h = maximum(abs.(KernelFlows.itr(P, KernelFlows.tr(P, Y_te)) - Y_te))
+    h = maximum(abs.(tr_inv(P, tr_fwd(P, Y_te)) - Y_te))
     println("Maximum error from invertible transformations: $h")
 end
