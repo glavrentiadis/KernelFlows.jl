@@ -43,11 +43,35 @@ function save_kernel(U::UnaryKernel, G::JLD2.Group)
     G["k"] = string(U.k)
     G["nXlinear"] = U.nXlinear
     G["theta_start"] = U.θ_start
+    G["kerneltype"] = "UnaryKernel"
 end
 
 function save_kernel(U::AnalyticKernel, G::JLD2.Group)
     G["K_and_∂K∂logα!"] = string(U.K_and_∂K∂logα!)
     G["theta_start"] = U.θ_start
+    G["kerneltype"] = "AnalyticKernel"
+end
+
+
+function load_analytic_kernel(G::JLD2.Group, kerneltable::Dict)
+    k = kerneltable[G["K_and_∂K∂logα!"]]
+    θ_start = G["theta_start"]
+    AnalyticKernel(k, θ_start)
+end
+
+
+function load_unary_kernel(G::JLD2.Group, kerneltable::Dict)
+    k = kerneltable[G["k"]]
+    nXlinear = G["nXlinear"]
+    θ_start = G["theta_start"]
+    UnaryKernel(k, θ_start, nXlinear)
+end
+
+
+function load_binary_kernel(G::JLD2.Group, kerneltable::Dict)
+    k = kerneltable[G["k"]]
+    θ_start = G["theta_start"]
+    BinaryKernel(k, θ_start)
 end
 
 
@@ -60,12 +84,20 @@ function load_kernel(G::JLD2.Group)
                        "inverse_quadratic" => inverse_quadratic,
                        "spherical_exp" => spherical_exp,
                        "spherical_sqexp" => spherical_sqexp,
-                       "Matern32_αgrad!" => Matern32_analytic)
+                       "Matern32_αgrad!" => Matern32_αgrad!)
 
-    k = kerneltable[G["k"]]
-    nXlinear = G["nXlinear"]
-    θ_start = G["theta_start"]
-    UnaryKernel(k, θ_start, nXlinear)
+    # Default to UnaryKernel for loading legacy emulators
+    kt = "kerneltype" in keys(G) ? G["kerneltype"] : "UnaryKernel"
+
+    if kt == "AnalyticKernel"
+        k = load_analytic_kernel(G, kerneltable)
+    elseif kt == "UnaryKernel"
+        k = load_unary_kernel(G, kerneltable)
+    elseif kt == "BinaryKernel"
+        k = load_binary_kernel(G, kerneltable)
+    end
+
+    k
 end
 
 
