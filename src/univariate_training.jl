@@ -148,7 +148,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
 
         # Recalculate tree every now and then; otherwise correct
         # observations are not picked
-        if i % 100 == 1 && minibatch_method in [:neighborhood,:hybrid]
+        if i % 500 == 1 && minibatch_method in [:neighborhood,:hybrid]
             Z .= X
             Z .*= exp.(O.x[1:nλ])'
             kernel_matrix_fast!(k, exp.(O.x[nλ+1:end]), Z, buf, Ω;
