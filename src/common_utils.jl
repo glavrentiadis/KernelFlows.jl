@@ -37,23 +37,32 @@ end
 
 """Split inputs X and outputs Y randomly into training and
 testing. The number of points in testing is given by kwarg nte. Random
-seed can be fixed for reproducibility."""
-function split_data(X::Matrix{T}, Y::Matrix{T}; nte::Int = 500,
-                    seed::UInt = rand(UInt)) where T <: Real
-    s_tr, s_te = randomsplit(size(X)[1], nte)
+seed can be fixed for reproducibility. By default the very edges of
+inputs values go to the training set, in order to avoid extrapolation
+and maximize coverage."""
+function split_data(X::Matrix{T}, Y::Matrix{T};
+                    ntr::Int = 0, nte::Int = 500,
+                    seed::UInt = rand(UInt),
+                    edges_to_training::Int = 2) where T <: Real
+    s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
     X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
 end
 
 
 function split_data(X::Matrix{T}, Y_all::Vector{Matrix{T}};
-                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
-    s_tr, s_te = randomsplit(size(X)[1], nte)
+                    ntr::Int = 0, nte::Int = 500,
+                    seed::UInt = rand(UInt),
+                    edges_to_training::Int = 2) where T <: Real
+    s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
     X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all]
 end
 
+
 function split_data(Zs::Vector{Matrix{T}};
-                    nte::Int = 500, seed::UInt = rand(UInt)) where T <: Real
-    s_tr, s_te = randomsplit(Zs[1], nte; seed)
+                    ntr::Int = 0, nte::Int = 500,
+                    seed::UInt = rand(UInt),
+                    edges_to_training::Int = 2) where T <: Real
+    s_tr, s_te = randomsplit(Zs[1], nte; seed, edges_to_training, ntr)
     [[Z[s_tr, :] for Z in Zs]..., [Z[s_te, :] for Z in Zs]...]
 end
 
@@ -67,8 +76,21 @@ function randomsplit(nfull::Int, npart::Int; seed::UInt = rand(UInt))
 end
 
 
-function randomsplit(X::AbstractArray, nte::Int; seed::UInt = rand(UInt))
-    randomsplit(size(X)[1], nte; seed)
+function randomsplit(X::AbstractArray, nte::Int;
+                     ntr::Int = 0, seed::UInt = rand(UInt),
+                     edges_to_training::Int = 2)
+    n = size(X)[1]
+
+    starts = [sortperm(c)[1:edges_to_training] for c in eachcol(X)]
+    ends = [sortperm(c, rev = true)[1:edges_to_training] for c in eachcol(X)]
+    s_edges = unique(vcat(starts..., ends...))
+    s_remain = setdiff(1:n, s_edges)
+    n_remain = length(s_remain)
+
+    (s_tr, s_te) = randomsplit(n_remain, nte; seed)
+    s_tr = [s_edges..., s_tr...]
+    s_tr = ntr == 0 ? s_tr : s_tr[1:ntr]
+    return (s_tr, s_te)
 end
 
 
