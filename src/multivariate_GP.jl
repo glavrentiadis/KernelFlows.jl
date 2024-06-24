@@ -37,11 +37,23 @@ function update_MVGPModel!(MVM::MVGPModel{T};
     λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΛ))
     θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
 
-    parallel = length(MVM.Ms[1].ζ) < 10001
+    parallel = length(MVM.Ms[1].ζ) < 25001
+    nM = length(MVM.Ms)
     if parallel
-        print("\rUpdating all $(length(MVM.Ms)) GPs in parallel...")
+        ndata = length(MVM.Ms[1].ζ)
+
+        H = Float64
+        buf1s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
+        buf2s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
+        println("Updating all $(length(MVM.Ms)) GPs in parallel...")
+        computed = zeros(Int, Threads.nthreads())
+        print("\rCompleted $(sum(computed)) of $nM tasks ")
+
         Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))
-            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+            tid = Threads.threadid()
+            update_GPModel!(M; newλ = λs[i], newθ = θs[i], buf1 = buf1s[tid], buf2 = buf2s[tid])
+            computed[Threads.threadid()] += 1
+            print("\rCompleted $(sum(computed)) of $nM tasks ")
         end
     else
         print("\rUpdating all $(length(MVM.Ms)) GPs...")
