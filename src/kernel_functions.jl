@@ -48,7 +48,7 @@ function get_UnaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
              :Matern32 => Matern32,
              :Matern52 => Matern52)
     # Initial θ for UnaryKernels
-    θ₀_U = T.(exp.([0., 0., 0., -12.]))
+    θ₀_U = T.(exp.([0., 0., 0., -7.]))
     return [UnaryKernel(d[s], θ₀_U, length(XP.values)) for XP in G.Xprojs]
 end
 
@@ -70,7 +70,7 @@ end
 
 function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:Matern32_analytic => Matern32_αgrad!)
-    θ₀_U = T.(exp.([0., 0., 0., -12.]))
+    θ₀_U = T.(exp.([0., 0., 0., -7.]))
     return [AnalyticKernel(d[s], θ₀_U) for XP in G.Xprojs]
 end
 

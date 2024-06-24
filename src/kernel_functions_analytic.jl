@@ -41,6 +41,7 @@ function pw_and_linear!(A::AbstractMatrix{T}, out1::AbstractMatrix{T}, out2::Abs
     # display(out1)
     # precision error may lead to tiny small values on diagonal
     out1[diagind(out1)] .= 0
+    out1 .+= 1e-14 # we may get tiny negative values somewhere
     out1 .= sqrt.(out1) # Euclidean distance
 end
 
