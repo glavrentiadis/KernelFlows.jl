@@ -77,9 +77,9 @@ end
 function update_GPModel!(M::GPModel{T};
                          newλ::Union{Nothing, Vector{T}} = nothing,
                          newθ::Union{Nothing, Vector{T}} = nothing,
-                         buf1::Union{Nothing, Matrix{T}} = nothing,
-                         buf2::Union{Nothing, Matrix{T}} = nothing,
-                         skip_K_update::Bool = false) where T <: Real
+                         buf1::Union{Nothing, Matrix{T2}} = nothing,
+                         buf2::Union{Nothing, Matrix{T2}} = nothing,
+                         skip_K_update::Bool = false) where {T<:Real,T2<:Real}
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
@@ -97,10 +97,19 @@ function update_GPModel!(M::GPModel{T};
     if !skip_K_update
         # Allocate buffers
         ntr = length(M.ζ)
-        (buf1 == nothing) && (buf1 = zeros(T, (ntr, ntr)))
-        (buf2 == nothing) && (buf2 = zeros(T, (ntr, ntr)))
-        kernel_matrix_fast!(M.kernel, M.θ, M.Z, buf1, buf2; precision = true)
-        mul!(M.h, buf2, M.ζ)
+        (buf1 == nothing) && (buf1 = zeros(H, (ntr, ntr)))
+        (buf2 == nothing) && (buf2 = zeros(H, (ntr, ntr)))
+
+        # If buf1 of type T2 != T was given, we compute Cholesky with
+        # that type. Using e.g. Float32 instead of Float64 is faster,
+        # but less stable.
+        H = eltype(buf1)
+        h = H.(M.ζ) # need type converion for potrs!
+
+        kernel_matrix_fast!(M.kernel, H.(M.θ), H.(M.Z), buf1, buf2; precision = false)
+        LAPACK.potrf!('U', buf2)
+        LAPACK.potrs!('U', buf2, h)
+        M.h .= h # copy K⁻¹ζ where it belongs
     end
 
     M
