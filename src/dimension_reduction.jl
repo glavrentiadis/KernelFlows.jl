@@ -318,6 +318,12 @@ function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
     recover(Z, G.Yproj, G.μY,  G.σY)
 end
 
+"""Function to recover just one vector / scalar. As we return just one
+vector, it is a column vector. This is different from reduce_Y, where
+data are in rows."""
+function recover_y(z::AbstractVector{T}, G::GPGeometry{T}) where T <: Real
+    recover_Y(reshape(z, (1, length(z))), G)[:]
+end
 
 # Not yet adapted to new dimension reduction code
 # function reduced_unc_to_original(z::AbstractVector{T}, D::DimRedStruct{T};

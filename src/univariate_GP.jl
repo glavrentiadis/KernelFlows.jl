@@ -116,6 +116,47 @@ function update_GPModel!(M::GPModel{T};
 end
 
 
+"""Updates a vector of GPModels by calling update_GPModel!() for each
+of them. The parameters are supplied in matrices. By default, the
+inverse covariance is recomputed using whatever parameter values are
+in the variables M.λ and M.θ"""
+function update_GPModel!(Ms::Vector{GPModel{T}};
+                         newΛ::Union{Nothing, Matrix{T}} = nothing,
+                         newΨ::Union{Nothing, Matrix{T}} = nothing) where T <: Real
+
+    nM = length(Ms)
+    λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nM] : collect(eachcol(newΛ))
+    θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nM] : collect(eachcol(newΨ))
+
+    ndata = length(Ms[1].ζ)
+    parallel = ndata < 10000
+
+    if parallel
+        H = Float64
+        buf1s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
+        buf2s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
+        println("Updating all $(length(Ms)) GPs in parallel...")
+        computed = zeros(Int, Threads.nthreads())
+        print("\rCompleted $(sum(computed)) of $nM tasks ")
+
+        Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
+            tid = Threads.threadid()
+            update_GPModel!(M; newλ = λs[i], newθ = θs[i], buf1 = buf1s[tid], buf2 = buf2s[tid])
+            computed[Threads.threadid()] += 1
+            print("\rCompleted $(sum(computed)) of $nM tasks ")
+        end
+    else
+        print("\rUpdating all $(length(Ms)) GPs...")
+        for (i,M) ∈ collect(enumerate(Ms))
+            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+        end
+    end
+    println("done!")
+    Ms
+end
+
+
+
 """Convenience function to obtain logα from a GPModel{T}"""
 function get_logα(M::GPModel{T}) where T <: Real
     log.(vcat(M.λ, M.θ))

@@ -31,6 +31,8 @@ include("kernel_matrices.jl")
 include("loss_functions.jl")
 
 include("parametric_models.jl")
+include("jointly_learned_MVGPs.jl")
+
 include("nonparametric_models.jl")
 
 include("common_utils.jl")

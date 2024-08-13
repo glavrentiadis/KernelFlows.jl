@@ -27,44 +27,15 @@ end
 include("multivariate_training.jl")
 include("multivariate_prediction.jl")
 
-
-"""Updates MVGPmodel M by calling update_GPModel!()."""
 function update_MVGPModel!(MVM::MVGPModel{T};
                            newΛ::Union{Nothing, Matrix{T}} = nothing,
                            newΨ::Union{Nothing, Matrix{T}} = nothing) where T <: Real
-
-    nZYdims = length(MVM.Ms)
-    λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΛ))
-    θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachcol(newΨ))
-
-    parallel = length(MVM.Ms[1].ζ) < 25001
-    nM = length(MVM.Ms)
-    if parallel
-        ndata = length(MVM.Ms[1].ζ)
-
-        H = Float64
-        buf1s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
-        buf2s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
-        println("Updating all $(length(MVM.Ms)) GPs in parallel...")
-        computed = zeros(Int, Threads.nthreads())
-        print("\rCompleted $(sum(computed)) of $nM tasks ")
-
-        Threads.@threads :static for (i,M) ∈ collect(enumerate(MVM.Ms))
-            tid = Threads.threadid()
-            update_GPModel!(M; newλ = λs[i], newθ = θs[i], buf1 = buf1s[tid], buf2 = buf2s[tid])
-            computed[Threads.threadid()] += 1
-            print("\rCompleted $(sum(computed)) of $nM tasks ")
-        end
-    else
-        print("\rUpdating all $(length(MVM.Ms)) GPs...")
-        for (i,M) ∈ collect(enumerate(MVM.Ms))
-            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
-        end
-    end
-    println("done!")
-    MVM
+    update_GPModel!(MVM.Ms; newΛ, newΨ)
 end
 
+function update_MVGPModel!(MVMs::Vector{MVGPModel{T}}) where T <: Real
+    update_GPModel!(vcat([MVM.Ms for MVM in MVMs]...))
+end
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
@@ -92,7 +63,7 @@ end
 
 """Return log(α) for all GPModels in an MVGPModel, concatenated."""
 function get_logα(MVM::MVGPModel{T}) where T <: Real
-    vcat([get_logα(M) for M in MVM.Ms])
+    vcat([get_logα(M) for M in MVM.Ms]...)
 end
 
 
