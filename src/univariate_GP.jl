@@ -70,13 +70,16 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
 end
 
 
+default_λ(M::GPModel) = length(M.λ_training) == 0 ? M.λ : M.λ_training[end]
+default_θ(M::GPModel) = length(M.θ_training) == 0 ? M.θ : M.θ_training[end]
+
 """Updates 1-d GPmodel M after new parameters newλ and/or newθ have
    been obtained by training the model. Even if these parameters are
    not given, M.h is recomputed, unless skip_K_update == true (it is
    not computed when GPModel is initialized)."""
 function update_GPModel!(M::GPModel{T};
-                         newλ::Union{Nothing, Vector{T}} = nothing,
-                         newθ::Union{Nothing, Vector{T}} = nothing,
+                         newλ::Vector{T} = default_λ(M),
+                         newθ::Vector{T} = default_θ(M),
                          buf1::Union{Nothing, Matrix{T2}} = nothing,
                          buf2::Union{Nothing, Matrix{T2}} = nothing,
                          skip_K_update::Bool = false) where {T<:Real,T2<:Real}
@@ -97,6 +100,7 @@ function update_GPModel!(M::GPModel{T};
     if !skip_K_update
         # Allocate buffers
         ntr = length(M.ζ)
+        H = Float64
         (buf1 == nothing) && (buf1 = zeros(H, (ntr, ntr)))
         (buf2 == nothing) && (buf2 = zeros(H, (ntr, ntr)))
 
@@ -120,13 +124,9 @@ end
 of them. The parameters are supplied in matrices. By default, the
 inverse covariance is recomputed using whatever parameter values are
 in the variables M.λ and M.θ"""
-function update_GPModel!(Ms::Vector{GPModel{T}};
-                         newΛ::Union{Nothing, Matrix{T}} = nothing,
-                         newΨ::Union{Nothing, Matrix{T}} = nothing) where T <: Real
+function update_GPModel!(Ms::Vector{GPModel{T}}; skip_K_update::Bool = false) where T <: Real
 
     nM = length(Ms)
-    λs = (newΛ == nothing) ? [nothing for _ ∈ 1:nM] : collect(eachcol(newΛ))
-    θs = (newΨ == nothing) ? [nothing for _ ∈ 1:nM] : collect(eachcol(newΨ))
 
     ndata = length(Ms[1].ζ)
     parallel = ndata < 10000
@@ -141,14 +141,14 @@ function update_GPModel!(Ms::Vector{GPModel{T}};
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
             tid = Threads.threadid()
-            update_GPModel!(M; newλ = λs[i], newθ = θs[i], buf1 = buf1s[tid], buf2 = buf2s[tid])
+            update_GPModel!(M; buf1 = buf1s[tid], buf2 = buf2s[tid], skip_K_update)
             computed[Threads.threadid()] += 1
             print("\rCompleted $(sum(computed)) of $nM tasks ")
         end
     else
         print("\rUpdating all $(length(Ms)) GPs...")
         for (i,M) ∈ collect(enumerate(Ms))
-            update_GPModel!(M; newλ = λs[i], newθ = θs[i])
+            update_GPModel!(M; skip_K_update)
         end
     end
     println("done!")

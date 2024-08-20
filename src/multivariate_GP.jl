@@ -27,14 +27,12 @@ end
 include("multivariate_training.jl")
 include("multivariate_prediction.jl")
 
-function update_MVGPModel!(MVM::MVGPModel{T};
-                           newΛ::Union{Nothing, Matrix{T}} = nothing,
-                           newΨ::Union{Nothing, Matrix{T}} = nothing) where T <: Real
-    update_GPModel!(MVM.Ms; newΛ, newΨ)
+function update_MVGPModel!(MVM::MVGPModel{T}; skip_K_update::Bool = false) where T <: Real
+    update_GPModel!(MVM.Ms; skip_K_update)
 end
 
-function update_MVGPModel!(MVMs::Vector{MVGPModel{T}}) where T <: Real
-    update_GPModel!(vcat([MVM.Ms for MVM in MVMs]...))
+function update_MVGPModel!(MVMs::Vector{MVGPModel{T}}; skip_K_update::Bool = false) where T <: Real
+    update_GPModel!(vcat([MVM.Ms for MVM in MVMs]...); skip_K_update)
 end
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
