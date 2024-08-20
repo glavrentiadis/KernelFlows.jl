@@ -141,6 +141,56 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, l
 end
 
 
+# Optimized version of the RMSE loss. This does fewer
+# calculations. However, performance benefits as of now are minor, so
+# further profiling is needed.
+function ρ_RMSE_optimized(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T
+    K = kernel_matrix(k, logθ, X)
+    L = cholesky(K)
+    KI = inv(L)
+    n = length(y)
+
+    # With predictonlycenter, only κ best-informed points are
+    # predicted, discarding anything on the edges. May improve
+    # performance / accuracy.
+    κ = max(min(n÷5, 20),4)
+    s = predictonlycenter ? sortperm(sum(K, dims = 2)[:], rev=true)[1:κ] : randperm(n)[1:κ]
+    tot = zero(T)
+
+    r = KI * y
+
+    for i in s
+        m = [1:i-1; i+1:n]
+        yi = y[i]
+        Ki = @view K[m,i]
+        KIi = @view KI[m,i]
+
+        # second factor, latter product:
+        c1 = r[i] - KI[i,i]*yi
+        c2 = c1 / KI[i,i]
+        c3 = c2 * dot(KIi, Ki)
+
+        # THESE ARE GOOD
+        # println("should be zero: $(dot(Ki, r[m] - yi * KIi) - dot(Ki, KI[m,m], y[m]))")
+        t = @views dot(Ki, r[m] - yi * KIi)
+        t -= c3
+        cc = t - yi
+        tot += (t - yi)^2
+    end
+
+    # tot2 = zero(T)
+    # for i in s
+    #     m = [1:i-1; i+1:n]
+    #     t = @views (K[m,i]' * (KI - KI[:,i] * KI[:,i]' / KI[i,i])[m,m] * y[m] - y[i])^2
+    #     # println(t)
+    #     tot2 += t
+    # end
+    # println("Correct total: $(tot2/κ)")
+
+    return tot / κ
+end
+
+
 """Splits a large buffer into a number of small ones"""
 function split_buffer_UNUSED(A::AbstractArray{T}, sizes::Tuple) where T <: Real
     arrs = []
