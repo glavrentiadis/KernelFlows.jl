@@ -41,7 +41,7 @@ seed can be fixed for reproducibility. By default the very edges of
 inputs values go to the training set, in order to avoid extrapolation
 and maximize coverage."""
 function split_data(X::Matrix{T}, Y::Matrix{T};
-                    ntr::Int = 0, nte::Int = 500,
+                    ntr::Int = -1, nte::Int = 500,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
@@ -50,7 +50,7 @@ end
 
 
 function split_data(X::Matrix{T}, Y_all::Vector{Matrix{T}};
-                    ntr::Int = 0, nte::Int = 500,
+                    ntr::Int = -1, nte::Int = 500,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
@@ -59,7 +59,7 @@ end
 
 
 function split_data(Zs::Vector{Matrix{T}};
-                    ntr::Int = 0, nte::Int = 500,
+                    ntr::Int = -1, nte::Int = 500,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(Zs[1], nte; seed, edges_to_training, ntr)
@@ -77,7 +77,7 @@ end
 
 
 function randomsplit(X::AbstractArray, nte::Int;
-                     ntr::Int = 0, seed::UInt = rand(UInt),
+                     ntr::Int = -1, seed::UInt = rand(UInt),
                      edges_to_training::Int = 2)
     n = size(X)[1]
 
@@ -88,9 +88,9 @@ function randomsplit(X::AbstractArray, nte::Int;
     n_remain = length(s_remain)
 
     (s_tr, s_te) = randomsplit(n_remain, nte; seed)
-    s_tr = [s_edges..., s_tr...]
-    s_tr = ntr == 0 ? s_tr : s_tr[1:ntr]
-    return (s_tr, s_te)
+    s_tr = [s_edges..., s_remain[s_tr]...]
+    s_tr = ntr == -1 ? s_tr : s_tr[1:ntr]
+    return (s_tr, s_remain[s_te])
 end
 
 
