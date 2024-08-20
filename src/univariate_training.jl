@@ -21,6 +21,14 @@ struct FlowRes{T}
     α_values::Vector{Vector{T}} # scaling and kernel parameters and nugget
 end
 
+# Work buffer structs for each thread
+abstract type AbstractWorkBuffers end
+struct AnalyticWorkBuffers{T} <: AbstractWorkBuffers
+    workbufs::Vector{Array{T}}
+    Kgrads::Vector{Matrix{T}}
+end
+struct DummyWorkBuffers <: AbstractWorkBuffers end
+
 
 function best_α_from_flowres(flowres::FlowRes{T};
                         navg::Union{Int, Nothing} = nothing,
@@ -38,7 +46,9 @@ function train!(M::GPModel{T};
                 optalg::Symbol = :AMSGrad,
                 optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
                 ρ::Function = ρ_RMSE, niter::Int = 500, n::Int = 48,
-                navg::Union{Nothing, Int} = nothing, quiet::Bool = false,
+                navg::Union{Nothing, Int} = nothing,
+                wbs::AbstractWorkBuffers = get_wbs(M, n),
+                quiet::Bool = false,
                 skip_K_update::Bool = false) where {T<:Real,H<:Any}
 
     logα = get_logα(M)
@@ -47,7 +57,7 @@ function train!(M::GPModel{T};
 
     Z = M.Z ./ M.λ'
     O = get_optimizer(optalg, similar(logα); optargs)
-    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; n, niter, O, quiet)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; n, niter, O, wbs, quiet)
 
     if niter > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -64,6 +74,33 @@ function train!(M::GPModel{T};
     M
 end
 
+function get_wbs(M::GPModel{T}, n::Int) where T <: Real
+    get_wbs(M.kernel, n, length(M.λ) + 4)
+end
+
+get_wbs(k::Kernel, n::Int, nα::Int) = DummyWorkBuffers()
+function get_wbs(k::AnalyticKernel, n::Int, nα::Int)
+    T = eltype(k.θ_start)
+    nλ = nα - 4
+    bufsizes  = ((n,n), (n,n), (nα,), (n,), (n,), (n,), (n,n), (n,n),
+                 (n, nλ), (nα,), (n,), (n,n), (n,n), (n,n))
+    Kgradsizes = [(n,n) for _ in 1:nα]
+    workbufs = [zeros(T, bs) for bs in bufsizes]
+    Kgrads = [zeros(T, bs) for bs in Kgradsizes]
+    return AnalyticWorkBuffers(workbufs, Kgrads)
+end
+
+function zero_wbs!(wbs::AbstractWorkBuffers) end
+function zero_wbs!(wbs::AnalyticWorkBuffers{T}) where T <: Real
+    for w in wbs.workbufs
+        w .= 0.0
+    end
+    for kg in wbs.Kgrads
+        kg .= 0.0
+    end
+end
+
+
 
 function train!(Ms::Vector{GPModel{T}};
                 optalg::Symbol = :AMSGrad,
@@ -77,8 +114,13 @@ function train!(Ms::Vector{GPModel{T}};
     computed = zeros(Int, Threads.nthreads())
     print("\rCompleted $(sum(computed)) of $nM tasks ")
 
-    Threads.@threads for M in Ms
-        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update, quiet)
+    nα = maximum([length(M.λ) + 4 for M in Ms])
+    all_wbs = [get_wbs(Ms[1], n) for _ in 1:Threads.nthreads()]
+
+    Threads.@threads :static for M in Ms
+        tid = Threads.threadid()
+        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update,
+               wbs = all_wbs[tid], quiet)
         computed[Threads.threadid()] += 1
         print("\rCompleted $(sum(computed)) of $nM tasks ")
     end
@@ -92,6 +134,7 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
               ρ::Function, k::Kernel, logα::Vector{T};
               n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
               O::AbstractOptimizer = AMSGrad(logα),
+              wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)),
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
@@ -109,15 +152,10 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
     ∇ξ(k::AutodiffKernel, X, ζ, logα) = Zygote.gradient(logα -> ξ(k, X, ζ, logα), logα)
     ξ_and_∇ξ(k::AutodiffKernel, X, ζ, logα) = (ξ(k, X, ζ, logα), ∇ξ(k, X, ζ, logα)[1])
 
-    # Only allocate if using AnalyticKernel
-    if typeof(k) <: AnalyticKernel
-        bufsizes  = ((n,n), (n,n), (nα,), (n,), (n,), (n,), (n,n), (n,n),
-                     (n, nλ), (nα,), (n,), (n,n), (n,n), (n,n))
-        Kgradsizes = [(n,n) for _ in 1:nα]
-        workbufs = [zeros(T, bs) for bs in bufsizes]
-        Kgrads = [zeros(T, bs) for bs in Kgradsizes]
-    end
-    ξ_and_∇ξ(k::AnalyticKernel, X, ζ, logα) = ρ(X, ζ, k, logα, workbufs, Kgrads)
+    # Empty buffers before starting new training
+    zero_wbs!(wbs)
+
+    ξ_and_∇ξ(k::AnalyticKernel, X, ζ, logα) = ρ(X, ζ, k, logα, wbs.workbufs, wbs.Kgrads)
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
 
