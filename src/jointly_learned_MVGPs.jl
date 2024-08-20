@@ -17,9 +17,16 @@ function predict_M(M::GPModel{T}, i::Int, logα, s::Vector{Int}, out::Union{Abst
     n = length(s)
 
     Ω = @views kernel_matrix(M.kernel, logθ, M.Z[s,:] .* λ')
-    L = @views cholesky(Ω[2:end,2:end]) # training data - we predict the first
 
+    # Training data - we predict the first entry
+    L = @views cholesky(Ω[2:end,2:end])
     h = @views L \ M.ζ[s[2:end]]
+
+    # Debug:
+    # KI = inv(Ω[2:end,2:end])
+    # hh = KI * M.ζ[s[2:end]]
+    # println(sum(abs.(h - hh)))
+
     out[i] = @views dot(h, Ω[2:end,1])
 end
 
@@ -108,12 +115,12 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
                          errorsigma::Function = one{T},
                          optalg::Symbol = :AMSGrad,
                          optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                         niter::Int = 500, n::Int = 64, skip_K_update::Bool = false) where {T<:Real, H<:Any}
+                         niter::Int = 500, n::Int = 64,
+                         skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
     Random.seed!(1)
     ndata = length(MVMs[1].Ms[1].ζ)
-
-    reg = 1e-5
+    reg = T(1e-5)
 
     # Helper variables for indexing MVMs, needed by ξ
     logα_idxs, z_idxs = get_logα_and_z_idxs(MVMs)
@@ -123,33 +130,22 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
                logα_tot::AbstractVector{T}, y_true_all::Vector{Vector{T}},
                fy_true::Vector{T}, σ::Vector{T}) where T <: Real
         y_preds_all = predict_MVMs(MVMs, s, logα_tot, logα_idxs, z_idxs)
-        # y_true_all = recover_training_labels(MVMs, s[1])
 
         fy_pred = fwdfun_pred(y_true_all..., y_preds_all...)
 
-        k = rand(1:285)
-        println(k)
-        fp1 = fy_pred[k]
-        ft1 = fy_true[k]
-        println("$ft1 $fp1")
-        yt1 = y_true_all[3][k]
-        yp1 = y_preds_all[3][k]
-        println("$yt1 $yp1")
-
-        # display(fy_pred)
-        # display(fy_true)
-        # erggg
+        # Debug:
+        # k = rand(1:285)
+        # fp1 = fy_pred[k]
+        # ft1 = fy_true[k]
+        # yt1 = y_true_all[3][k]
+        # yp1 = y_preds_all[3][k]
+        # yd1 = yt1 - yp1
+        # println("true / pred / diff: $yt1 $yp1 $yd1")
 
         tot = zero(T)
         yt = vcat(y_true_all...)
         yp = vcat(y_preds_all...)
-        tot += 1e-3 * sum((yt - yp).^2)
-
-        # for i in 1:length(y_true_all)
-        #     vt = y_true_all[i]
-        #     vp = y_preds_all[i]
-        #     tot += 1e-3 * dot(vt - vp, vt - vp)
-        # end
+        tot += T(1e-2) * sum((yt - yp).^2)
 
         tot += sum(((fy_pred - fy_true) ./ σ).^2) + reg * sum(exp.(logα_tot))
         return tot
@@ -167,14 +163,29 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
     logα_tot = get_logα(MVMs)
     O = get_optimizer(optalg, logα_tot; optargs)
 
-
     # Let's do all the iterations at once.
     all_Ms = vcat([MVM.Ms for MVM in MVMs]...)
     nMs = length(all_Ms)
 
-    # for each iteration:
+    # For each iteration:
     for i in 1:niter
+        ((i+1) % 25 == 0) && (print("$i "))
         s = all_s[i]
+
+        # The same minibatch is needed for each univariate model M,
+        # but they all have different parameters, so choosing the
+        # "correct" one is not possible. We use the first GPModel of
+        # the first MVGPModel to select the minibatch. This could also
+        # be randomized - however, the weights of some models may be
+        # small, so sampling weights should probably follow
+        # MVM.G.Yproj.values - but then again, the objective function
+        # is a nonlinear function of multiple MVGPModels, so that
+        # would not be strictly correct either.
+        M11 = MVMs[1].Ms[1]
+        Zi = M11.Z[s,:] .* (default_λ(M11) ./ M11.λ)'
+        dists = pairwise(SqEuclidean(), Zi; dims = 1)
+        s2 = sortperm(sum(exp.(-dists), dims = 1)[:])
+        s = s[s2[end:-1:1]]
 
         # True labels for first element in minibatch
         y_true_all = recover_training_labels(MVMs, s[1])
@@ -182,13 +193,9 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
         fy_true = fwdfun_true(y_true_all...)
         # Error standard deviation
         σ = errorsigma(y_true_all...)
-        # display(s)
-        # display(fy_true)
-        # display(σ)
 
         loss = ξ(MVMs, s, logα_tot, y_true_all, fy_true, σ)
         ∇logα_tot = ∇ξ(MVMs, s, logα_tot, y_true_all, fy_true, σ)[1]
-        # display(∇logα_tot)
         iterate!(O, ∇logα_tot)
 
         # Record parameter path for later
@@ -199,13 +206,6 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
         end
     end
 
-    if !skip_K_update
-        for i in 1:nMs
-            M = all_Ms[i]
-            M.λ .= M.λ_training[end]
-            M.θ .= M.θ_training[end]
-        end
-        update_GPModel!(all_Ms)
-    end
-
+    # Update model, and potentially each M.h
+    update_GPModel!(all_Ms; skip_K_update)
 end
