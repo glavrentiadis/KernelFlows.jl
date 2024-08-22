@@ -44,7 +44,7 @@ function split_data(X::Matrix{T}, Y::Matrix{T};
                     ntr::Int = -1, nte::Int = 500,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
-    s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
+    s_tr, s_te = randomsplit(X, nte; seed, edges_to_training, ntr)
     X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
 end
 
@@ -53,7 +53,7 @@ function split_data(X::Matrix{T}, Y_all::Vector{Matrix{T}};
                     ntr::Int = -1, nte::Int = 500,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
-    s_tr, s_te = randomsplit(size(X)[1], nte, edges_to_training; ntr)
+    s_tr, s_te = randomsplit(X, nte; seed, edges_to_training, ntr)
     X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all]
 end
 
