@@ -31,7 +31,7 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg_Y::T = 1e-2, reg_X::T = reg_Y, maxd
     X = X * Xvecs
     Y = Y * Yvecs
 
-    H = @views hcat(X[s,:], Y[s,:])
+    H = hcat(X, Y)
     C = cov(H)
 
     Cxx = @view C[1:ndx,1:ndx]

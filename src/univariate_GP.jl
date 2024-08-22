@@ -111,8 +111,8 @@ function update_GPModel!(M::GPModel{T};
         h = H.(M.ζ) # need type converion for potrs!
 
         kernel_matrix_fast!(M.kernel, H.(M.θ), H.(M.Z), buf1, buf2; precision = false)
-        LAPACK.potrf!('U', buf2)
-        LAPACK.potrs!('U', buf2, h)
+        LAPACK.potrf!('U', buf2) # cholesky
+        LAPACK.potrs!('U', buf2, h) # solve h <- inv(K) * h
         M.h .= h # copy K⁻¹ζ where it belongs
     end
 
