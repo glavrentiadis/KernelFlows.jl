@@ -270,6 +270,12 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AnalyticKernel,
     LinearAlgebra.copytri!(KI, 'U')
 
     ρtot = 0.0
+
+    # When training multiple MVMs together, buffers are sized
+    # according to the largest one. Hence, different number of input
+    # dimensions would lead to αgrad buffer of size of the largest
+    # one. We ensure correct gradient buffer here.
+    (length(αgrad) > nα) && (αgrad = @views αgrad[1:nα])
     αgrad .= 0.0
 
     hgrad = vbuf1

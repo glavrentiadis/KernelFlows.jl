@@ -74,8 +74,8 @@ function train!(M::GPModel{T};
     M
 end
 
-function get_wbs(M::GPModel{T}, n::Int) where T <: Real
-    get_wbs(M.kernel, n, length(M.λ) + 4)
+function get_wbs(M::GPModel{T}, n::Int; nα::Int = length(M.λ) + 4) where T <: Real
+    get_wbs(M.kernel, n, nα)
 end
 
 get_wbs(k::Kernel, n::Int, nα::Int) = DummyWorkBuffers()
@@ -115,7 +115,7 @@ function train!(Ms::Vector{GPModel{T}};
     print("\rCompleted $(sum(computed)) of $nM tasks ")
 
     nα = maximum([length(M.λ) + 4 for M in Ms])
-    all_wbs = [get_wbs(Ms[1], n) for _ in 1:Threads.nthreads()]
+    all_wbs = [get_wbs(Ms[1], n; nα) for _ in 1:Threads.nthreads()]
 
     Threads.@threads :static for M in Ms
         tid = Threads.threadid()

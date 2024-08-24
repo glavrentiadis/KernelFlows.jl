@@ -56,9 +56,14 @@ function Matern32_αgrad!(X::AbstractMatrix{T}, logα::AbstractVector{T},
 
     Linbuf, Dbuf, Xbuf, vbuf1, vbuf2, Mbuf1, Mbuf2, Mbuf3 = workbufs
 
+    if nα < length(vbuf1)
+        vbuf1 = @view vbuf1[1:nα]
+        Xbuf = @view Xbuf[:,1:nα-4]
+    end
+
     # Shorthands:
-    vbuf1 .= exp.(logα)
     α = vbuf1
+    α .= exp.(logα)
     λ = @view α[1:nα-4]
     nλ = length(λ)
     θ = @view α[nα-3:nα]
@@ -117,7 +122,7 @@ function Matern32_αgrad!(X::AbstractMatrix{T}, logα::AbstractVector{T},
     LinearAlgebra.copytri!(Kgrads[nλ+3], 'U')
 
     # Derivative wrt nugget weight
-    @views Kgrads[end][diagind(Kgrads[end])] .= α[end]
+    @views Kgrads[nλ+4][diagind(Kgrads[nλ+4])] .= α[end]
 
     debug = false
     if debug
