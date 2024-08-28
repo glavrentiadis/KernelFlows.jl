@@ -192,6 +192,9 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
         Z = similar(X)
     end
 
+    # Reusable buffer to copy data to at each iteration
+    local_Xbuf = similar(X, (n, nλ))
+
     for i ∈ 1:niter
         quiet || ((i % 500 == 0) && println("Training round $i/$niter"))
 
@@ -221,7 +224,8 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
         end
 
         s = unique(s)
-        ρval, grad = ξ_and_∇ξ(k, X[s,:], ζ[s], O.x)
+        local_Xbuf .= @views X[s,:]
+        ρval, grad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
         iterate!(O, grad) # update parameters in O.x
 
         # Debugging block if one wants to compare gradients from ξ_ref()
