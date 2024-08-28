@@ -113,7 +113,7 @@ function train!(Ms::Vector{GPModel{T}};
 
     nM = length(Ms)
     nα = maximum([length(M.λ) + 4 for M in Ms])
-    all_wbs = [get_wbs(Ms[1], n; nα) for _ in 1:Threads.nthreads()]
+    all_wbs = [get_wbs(Ms[1].kernel, n, nα) for _ in 1:Threads.nthreads()]
     size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...))
     size_MB = size_alloc ÷ 2^20
 
