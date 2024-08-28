@@ -134,6 +134,14 @@ function renormalize_columns(V::AbstractMatrix{T}; q::T = 1., new_scale::T = 0.)
 end
 
 
+function print_parameters(Ms::Vector{GPModel{T}}) where T <: Real
+    println("Log scaling factors (λ):")
+    display(round.(log.(vcat([M.λ' for M in Ms]...)), sigdigits = 2))
+    println("\nLog kernel parameters (θ):")
+    display(round.(log.(vcat([M.θ' for M in Ms]...)), sigdigits = 2))
+end
+
+
 function rebalance_data(X::AbstractMatrix{T}, nleave::Int, MVM::MVGPModel{T};
                         ydims::AbstractVector{Int} = 1:length(MVM.Ms),
                         nXlinear::Union{Int, Nothing} = nothing) where T <: Real

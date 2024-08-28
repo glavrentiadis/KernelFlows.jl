@@ -23,34 +23,10 @@ function train!(MVM::MVGPModel{T};
                 niter::Int = 500, n::Int = 32,
                 quiet::Bool = false,
                 navg::Union{Nothing, Int} = nothing,
-                ζcomps::AbstractVector{Int} = 1:length(MVM.Ms),
                 skip_K_update::Bool = false) where {T<:Real, H<:Any}
 
-    if !quiet
-        println("Initial scaling factors (log):")
-        display(round.(log.(vcat([M.λ' for M in MVM.Ms]...)), sigdigits = 2))
+    train!(MVM.Ms; ρ, optalg, optargs, niter, n, navg, quiet, skip_K_update)
 
-        println("Initial kernel parameters (log):")
-        display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
-    end
-
-    Threads.@threads :static for k ∈ ζcomps
-        train!(MVM.Ms[k]; ρ, optalg, optargs, niter, n, navg,
-               quiet, skip_K_update = true)
-    end
-
-    if !quiet
-        println("Final scaling factors (log):")
-        display(round.(log.(vcat([M.λ' for M in MVM.Ms]...)), sigdigits = 2))
-
-        println("Final kernel parameters (log):")
-        display(round.(log.(vcat([M.θ' for M in MVM.Ms]...)), sigdigits = 2))
-    end
-
-    # Update the MVGPModels sequentially, if requested.
-    skip_K_update || update_MVGPModel!(MVM)
-
-    MVM
 end
 
 

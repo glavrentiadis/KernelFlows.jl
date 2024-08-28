@@ -21,6 +21,7 @@ struct FlowRes{T}
     α_values::Vector{Vector{T}} # scaling and kernel parameters and nugget
 end
 
+
 # Work buffer structs for each thread
 abstract type AbstractWorkBuffers end
 struct AnalyticWorkBuffers{T} <: AbstractWorkBuffers
@@ -28,6 +29,34 @@ struct AnalyticWorkBuffers{T} <: AbstractWorkBuffers
     Kgrads::Vector{Matrix{T}}
 end
 struct DummyWorkBuffers <: AbstractWorkBuffers end
+
+
+function get_wbs(M::GPModel{T}, n::Int) where T <: Real
+    get_wbs(M.kernel, n, length(M.λ) + 4)
+end
+
+
+get_wbs(k::Kernel, n::Int, nα::Int) = DummyWorkBuffers()
+function get_wbs(k::AnalyticKernel, n::Int, nα::Int)
+    T = eltype(k.θ_start)
+    nλ = nα - 4
+    bufsizes  = ((n,n), (n,n), (nα,), (n,), (n,), (n,), (n,n), (n,n),
+                 (n, nλ), (nα,), (n,), (n,n), (n,n), (n,n))
+    Kgradsizes = [(n,n) for _ in 1:nα]
+    workbufs = [zeros(T, bs) for bs in bufsizes]
+    Kgrads = [zeros(T, bs) for bs in Kgradsizes]
+    return AnalyticWorkBuffers(workbufs, Kgrads)
+end
+
+function zero_wbs!(wbs::AbstractWorkBuffers) end
+function zero_wbs!(wbs::AnalyticWorkBuffers{T}) where T <: Real
+    for w in wbs.workbufs
+        w .= 0.0
+    end
+    for kg in wbs.Kgrads
+        kg .= 0.0
+    end
+end
 
 
 function best_α_from_flowres(flowres::FlowRes{T};
@@ -74,33 +103,6 @@ function train!(M::GPModel{T};
     M
 end
 
-function get_wbs(M::GPModel{T}, n::Int; nα::Int = length(M.λ) + 4) where T <: Real
-    get_wbs(M.kernel, n, nα)
-end
-
-get_wbs(k::Kernel, n::Int, nα::Int) = DummyWorkBuffers()
-function get_wbs(k::AnalyticKernel, n::Int, nα::Int)
-    T = eltype(k.θ_start)
-    nλ = nα - 4
-    bufsizes  = ((n,n), (n,n), (nα,), (n,), (n,), (n,), (n,n), (n,n),
-                 (n, nλ), (nα,), (n,), (n,n), (n,n), (n,n))
-    Kgradsizes = [(n,n) for _ in 1:nα]
-    workbufs = [zeros(T, bs) for bs in bufsizes]
-    Kgrads = [zeros(T, bs) for bs in Kgradsizes]
-    return AnalyticWorkBuffers(workbufs, Kgrads)
-end
-
-function zero_wbs!(wbs::AbstractWorkBuffers) end
-function zero_wbs!(wbs::AnalyticWorkBuffers{T}) where T <: Real
-    for w in wbs.workbufs
-        w .= 0.0
-    end
-    for kg in wbs.Kgrads
-        kg .= 0.0
-    end
-end
-
-
 
 function train!(Ms::Vector{GPModel{T}};
                 optalg::Symbol = :AMSGrad,
@@ -110,21 +112,30 @@ function train!(Ms::Vector{GPModel{T}};
                 skip_K_update::Bool = false) where {T<:Real,H<:Any}
 
     nM = length(Ms)
-    println("Training $nM GPs...")
-    computed = zeros(Int, Threads.nthreads())
-    print("\rCompleted $(sum(computed)) of $nM tasks ")
-
     nα = maximum([length(M.λ) + 4 for M in Ms])
     all_wbs = [get_wbs(Ms[1], n; nα) for _ in 1:Threads.nthreads()]
+    size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...))
+    size_MB = size_alloc ÷ 2^20
+
+    println("Training $nM univariate GPs.")
+    println("Buffers allocated for all threads: $size_MB MB.")
+    quiet || print_parameters(Ms)
+
+    computed = zeros(Int, Threads.nthreads())
+    print("\rCompleted 0/$nM tasks ")
 
     Threads.@threads :static for M in Ms
         tid = Threads.threadid()
-        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update,
+        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update = true,
                wbs = all_wbs[tid], quiet)
         computed[Threads.threadid()] += 1
-        print("\rCompleted $(sum(computed)) of $nM tasks ")
+        print("\rCompleted $(sum(computed))/$nM tasks...")
     end
-    println("done!")
+    println("done!\n")
+
+    update_GPModel!(Ms; skip_K_update)
+
+    quiet || print_parameters(Ms)
 end
 
 

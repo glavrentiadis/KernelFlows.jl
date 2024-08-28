@@ -127,29 +127,35 @@ in the variables M.λ and M.θ"""
 function update_GPModel!(Ms::Vector{GPModel{T}}; skip_K_update::Bool = false) where T <: Real
 
     nM = length(Ms)
-
     ndata = length(Ms[1].ζ)
     parallel = ndata < 10000
 
+    txt1 = parallel ? "in parallel" : "serially"
+    txt2 = skip_K_update ? "Skip updating" : "Also updates"
+    println("Updating $(length(Ms)) GPs in $txt1. $txt2 K⁻¹y in M.h.")
+
+    # Helper function for getting buffers
+    u(nd, nt) = [zeros(T, (nd, nd)) for _ in 1:nt]
+
+    print("\rCompleted 0/$nM tasks...")
     if parallel
-        H = Float64
-        buf1s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
-        buf2s = [zeros(H, (ndata, ndata)) for _ in 1:Threads.nthreads()]
-        println("Updating all $(length(Ms)) GPs in parallel...")
-        computed = zeros(Int, Threads.nthreads())
-        print("\rCompleted $(sum(computed)) of $nM tasks ")
+        nt = Threads.nthreads()
+        buf1s = u(ndata, nt)
+        buf2s = u(ndata, nt)
+        computed = zeros(Int, nt)
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
             tid = Threads.threadid()
             update_GPModel!(M; buf1 = buf1s[tid], buf2 = buf2s[tid], skip_K_update)
             computed[Threads.threadid()] += 1
-            print("\rCompleted $(sum(computed)) of $nM tasks ")
+            print("\rCompleted $(sum(computed))/$nM tasks...")
         end
     else
-        print("\rUpdating all $(length(Ms)) GPs...")
+        buf1, buf2 = u(ndata, 2)
         for (i,M) ∈ collect(enumerate(Ms))
-            update_GPModel!(M; skip_K_update)
-        end
+            update_GPModel!(M; skip_K_update, buf1, buf2)
+            print("\rCompleted $i/$nM tasks...")
+    end
     end
     println("done!")
     Ms
