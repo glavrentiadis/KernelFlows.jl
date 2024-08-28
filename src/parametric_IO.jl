@@ -46,9 +46,15 @@ function save_kernel(U::UnaryKernel, G::JLD2.Group)
     G["kerneltype"] = "UnaryKernel"
 end
 
-function save_kernel(U::AnalyticKernel, G::JLD2.Group)
-    G["K_and_∂K∂logα!"] = string(U.K_and_∂K∂logα!)
-    G["theta_start"] = U.θ_start
+function save_kernel(B::BinaryKernel, G::JLD2.Group)
+    G["k"] = string(B.k)
+    G["theta_start"] = B.θ_start
+    G["kerneltype"] = "BinaryKernel"
+end
+
+function save_kernel(A::AnalyticKernel, G::JLD2.Group)
+    G["K_and_∂K∂logα!"] = string(A.K_and_∂K∂logα!)
+    G["theta_start"] = A.θ_start
     G["kerneltype"] = "AnalyticKernel"
 end
 

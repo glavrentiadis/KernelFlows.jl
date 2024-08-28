@@ -147,7 +147,7 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
         ZX_te = origspace ? X_te : reduce_X(X_te, MVM.G, i)
         for j in 1:nX
             print("\r$i, $j")
-            !diff && Makie.scatter!(axes[j][k], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, legend = false, alpha=.3, strokewidth = 1)
+            !diff && Makie.scatter!(axes[j][k], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, alpha=.3, strokewidth = 1)
             pl!(axes[j][k], ZX_te[:,j], ZY_te[:,k], ZY_te_pred[:,k]; diff)
             if i - offset < nY
                 hidexdecorations!(axes[j][k], grid = false)
