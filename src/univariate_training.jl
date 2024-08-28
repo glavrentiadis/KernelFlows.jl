@@ -188,7 +188,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)
 
     ξ(k::AutodiffKernel, X, ζ, logα) =
-        ρ(X .* exp.(logα[1:nλ]'), ζ, k, logα[end-3:end]) +
+        ρ(X .* exp.(logα[1:nλ]'), ζ, k, logα[nλ+1:end]) +
         reg * sum(exp.(logα))
     ∇ξ(k::AutodiffKernel, X, ζ, logα) = Zygote.gradient(logα -> ξ(k, X, ζ, logα), logα)
     ξ_and_∇ξ(k::AutodiffKernel, X, ζ, logα) = (ξ(k, X, ζ, logα), ∇ξ(k, X, ζ, logα)[1])

@@ -73,7 +73,7 @@ end
 
 function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
                                   X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
-                                  workbuf::Matrix{T}) where T <: Real
+                                  workbuf::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
 
     (n,m) = size(workbuf)
     @inbounds for i in 1:n
