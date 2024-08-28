@@ -34,7 +34,7 @@ function kernel_matrix(k::BinaryKernel, logθ::AbstractVector{T}, X::AbstractArr
 
     K = hcat([[k.k(x, y, exp.(logθ[1:end-1])) for y in eachrow(X)] for x in eachrow(X)]...)
     # Add nugget
-    δ = max(exp(-15.), exp(logθ[4]))
+    δ = max(exp(-15.), exp(logθ[end]))
     K += Diagonal(δ * ones(size(X)[1]))
     return K
 end
@@ -102,7 +102,7 @@ function kernel_matrix_fast!(k::BinaryKernel, θ::AbstractVector{T}, X::Abstract
     end
 
     # Add nugget
-    δ = max(exp(-15), exp(logθ[4]))
+    δ = max(exp(-15), θ[end])
     buf[diagind(buf)] .+= δ
 
     if precision
