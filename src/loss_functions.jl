@@ -102,7 +102,7 @@ function ρ_complement(X::AbstractArray{T}, y::AbstractArray{T}, k::AutodiffKern
 end
 
 
-"""Leave one out cross validation"""
+"""Full leave-one-out cross validation"""
 function ρ_LOO(X::AbstractArray{Float64}, y::AbstractVector{Float64}, k::AutodiffKernel, logθ::AbstractArray{T}) where T
     Ω = kernel_matrix(k, logθ, X)
     Ω⁻¹ = inv(Ω)
@@ -124,11 +124,8 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, l
     KI = inv(K)
     n = length(y)
 
-    # With predictonlycenter, only κ best-informed points are
-    # predicted, discarding anything on the edges. May improve
-    # performance / accuracy.
-    κ = max(min(n÷5, 20),4)
-    s = predictonlycenter ? sortperm(sum(K, dims = 2)[:], rev=true)[1:κ] : randperm(n)[1:κ]
+    κ = κ_default
+    s = collect(1:κ_default)
     tot = zero(T)
 
     for i in s
@@ -144,17 +141,15 @@ end
 # Optimized version of the RMSE loss. This does fewer
 # calculations. However, performance benefits as of now are minor, so
 # further profiling is needed.
-function ρ_RMSE_optimized(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T
+function ρ_RMSE_optimized(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, logθ::AbstractArray{T}) where T
     K = kernel_matrix(k, logθ, X)
     L = cholesky(K)
     KI = inv(L)
     n = length(y)
 
-    # With predictonlycenter, only κ best-informed points are
-    # predicted, discarding anything on the edges. May improve
-    # performance / accuracy.
-    κ = max(min(n÷5, 20),4)
-    s = predictonlycenter ? sortperm(sum(K, dims = 2)[:], rev=true)[1:κ] : randperm(n)[1:κ]
+    κ = κ_default
+    s = collect(1:κ_default)
+
     tot = zero(T)
 
     r = KI * y
@@ -191,30 +186,13 @@ function ρ_RMSE_optimized(X::AbstractArray{T}, y::AbstractVector{T}, k::Autodif
 end
 
 
-"""Splits a large buffer into a number of small ones"""
-function split_buffer_UNUSED(A::AbstractArray{T}, sizes::Tuple) where T <: Real
-    arrs = []
-    i = 1
-    for s in sizes
-        n = prod(s)
-        @views push!(arrs, reshape(A[i:i+n-1], s))
-        i += n
-    end
-    arrs
-end
-
-
 # Minimize cross-validated RMSE directly (L2 loss).
-function ρ_RMSE_resampled(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T
+function ρ_RMSE_resampled(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel, logθ::AbstractArray{T}) where T
     Ω = kernel_matrix(k, logθ, X)
-
     n = length(y)
 
-    # With predictonlycenter, only κ best-informed points are
-    # predicted, discarding anything on the edges. May improve
-    # performance / accuracy.
-    κ = max(min(n÷5, 50),4)
-    s = predictonlycenter ? sortperm(sum(Ω, dims = 2)[1:κ], rev=true) : 1:κ
+    κ = κ_default
+    s = collect(1:κ_default)
 
     tot = zero(T)
     for ss in s
@@ -255,13 +233,8 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AnalyticKernel,
     # Get kernel matrix and its gradient wrt log in K and Kgrad.
     k.K_and_∂K∂logα!(X, logα, K, Kgrads, k_workbufs)
 
-    if length(s_LOO) == 0
-        # With predictonlycenter, only κ best-informed points are
-        # predicted, discarding anything on the edges. May improve
-        # performance / accuracy.
-        κ = max(min(n÷5, 20),4)
-        s_LOO = predictonlycenter ? sortperm(sum(K, dims = 2)[:], rev=true)[1:κ] : randperm(n)[1:κ]
-    end
+    κ = κ_default # set in minibatching.jl, optimally should be passed to ρ
+    s_LOO = collect(1:κ)
 
     # Invert K
     KI .= K

@@ -106,13 +106,15 @@ end
 
 
 """Randomly split ndata data points into n subsets. This makes sure
-all training data are equally often sampled in SGD."""
+all training data are equally often sampled in SGD. Returns a vector
+of vectors, each one of which contains indices for minibatches for
+each iteration"""
 function get_random_partitions(ndata::Int, n::Int, niter::Int)
     k = ndata ÷ n # shorthand
     m = round(Int, (niter / k) + 1) # how many times data needs to be partitioned
     R = [randperm(ndata) for _ ∈ 1:m]
     samples = [reshape(r[1:k*n], (k, n)) for r ∈ R]
-    vcat(samples...)[1:niter,:]
+    [collect(r) for r in eachrow(vcat(samples...)[1:niter,:])]
 end
 
 

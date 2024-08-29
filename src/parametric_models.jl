@@ -29,6 +29,8 @@ using Measures
 using Polynomials
 
 include("optimizers.jl")
+include("minibatching.jl")
+
 include("univariate_GP.jl")
 include("multivariate_GP.jl")
 include("multilevel_GP.jl")

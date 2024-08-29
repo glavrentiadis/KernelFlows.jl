@@ -16,31 +16,14 @@
 #
 
 
-function train!(MVM::MVGPModel{T};
-                ρ::Function = ρ_RMSE,
-                optalg::Symbol = :AMSGrad,
-                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                niter::Int = 500, n::Int = 32,
-                quiet::Bool = false,
-                navg::Union{Nothing, Int} = nothing,
-                skip_K_update::Bool = false) where {T<:Real, H<:Any}
-
-    train!(MVM.Ms; ρ, optalg, optargs, niter, n, navg, quiet, skip_K_update)
-
+function train!(MVM::MVGPModel{T}; kwargs...) where T <: Real
+    train!(MVM.Ms; kwargs...)
 end
 
 
-function train!(MVMs::Vector{MVGPModel{T}};
-                ρ::Function = ρ_RMSE,
-                optalg::Symbol = :AMSGrad,
-                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                niter::Int = 500,
-                n::Int = 32, quiet::Bool = false,
-                navg::Union{Nothing, Int} = nothing,
-                skip_K_update::Bool = false) where {T<:Real, H<:Any}
-
+function train!(MVMs::Vector{MVGPModel{T}}; kwargs...) where T <: Real
     Ms = [M for MVM in MVMs for M in MVM.Ms]
-    train!(Ms; optalg, optargs, niter, n, navg, skip_K_update, quiet)
+    train!(Ms; kwargs...)
 end
 
 

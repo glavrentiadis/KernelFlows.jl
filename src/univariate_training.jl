@@ -48,6 +48,7 @@ function get_wbs(k::AnalyticKernel, n::Int, nα::Int)
     return AnalyticWorkBuffers(workbufs, Kgrads)
 end
 
+
 function zero_wbs!(wbs::AbstractWorkBuffers) end
 function zero_wbs!(wbs::AnalyticWorkBuffers{T}) where T <: Real
     for w in wbs.workbufs
@@ -72,23 +73,25 @@ end
 
 
 function train!(M::GPModel{T};
+                ρ::Function = ρ_RMSE,
                 optalg::Symbol = :AMSGrad,
-                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                ρ::Function = ρ_RMSE, niter::Int = 500, n::Int = 48,
+                optargs::Dict{Symbol,H1} = Dict{Symbol,Any}(),
+                mbalg::Symbol = :multicenter,
+                mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
                 navg::Union{Nothing, Int} = nothing,
                 wbs::AbstractWorkBuffers = get_wbs(M, n),
                 quiet::Bool = false,
-                skip_K_update::Bool = false) where {T<:Real,H<:Any}
+                skip_K_update::Bool = false) where {T<:Real,H1<:Any,H2<:Any}
 
     logα = get_logα(M)
     nλ = length(M.λ)
-    n = min(n, length(M.ζ))
 
     Z = M.Z ./ M.λ'
     O = get_optimizer(optalg, similar(logα); optargs)
-    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; n, niter, O, wbs, quiet)
+    B = get_minibatcher(mbalg, Z; mbargs)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; O, B, wbs, quiet)
 
-    if niter > 0 # update parameters from training
+    if length(flowres.α_values) > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
     elseif length(M.ρ_values) > 0 # use last training value
         α = vcat(M.λ_training[end], M.θ_training[end])
@@ -105,14 +108,20 @@ end
 
 
 function train!(Ms::Vector{GPModel{T}};
+                ρ::Function = ρ_RMSE,
                 optalg::Symbol = :AMSGrad,
-                optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                ρ::Function = ρ_RMSE, niter::Int = 500, n::Int = 48,
+                optargs::Dict{Symbol,H1} = Dict{Symbol,Any}(),
+                mbalg::Symbol = :multicenter,
+                mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
                 navg::Union{Nothing, Int} = nothing, quiet::Bool = false,
-                skip_K_update::Bool = false) where {T<:Real,H<:Any}
+                skip_K_update::Bool = false) where {T<:Real,H1<:Any,H2<:Any}
 
     nM = length(Ms)
     nα = maximum([length(M.λ) + 4 for M in Ms])
+
+    # n comes from the minibatch object that has not been constructed
+    # yet. The default n_default is set in minibatching.jl
+    n = :n in keys(mbargs) ? mbargs[:n] : n_default
     all_wbs = [get_wbs(Ms[1].kernel, n, nα) for _ in 1:Threads.nthreads()]
     size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...))
     size_MB = size_alloc ÷ 2^20
@@ -126,7 +135,7 @@ function train!(Ms::Vector{GPModel{T}};
 
     Threads.@threads :static for M in Ms
         tid = Threads.threadid()
-        train!(M; ρ, optalg, optargs, niter, n, navg, skip_K_update = true,
+        train!(M; ρ, optalg, optargs, mbalg, mbargs, navg, skip_K_update = true,
                wbs = all_wbs[tid], quiet)
         computed[Threads.threadid()] += 1
         print("\rCompleted $(sum(computed))/$nM tasks...")
@@ -141,11 +150,14 @@ end
 
 """Function to do the actual 1-d learning. This does not depend on
 GPModel; that way it is more generally usable."""
-function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
-              ρ::Function, k::Kernel, logα::Vector{T};
-              n::Int = min(48, length(ζ) ÷ 2), niter::Int = 500,
+function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
+              ζ::AbstractVector{T}, # all labels
+              ρ::Function, # loss function
+              k::Kernel,
+              logα::Vector{T}; # log scaling parameters and kernel parameters
               O::AbstractOptimizer = AMSGrad(logα),
-              wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)),
+              B::AbstractMinibatch = RandomPartitions(length(ζ), niter, n),
+              wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)), # buffers
               quiet::Bool = false) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
@@ -168,62 +180,16 @@ function flow(X::AbstractMatrix{T}, ζ::AbstractVector{T},
 
     ξ_and_∇ξ(k::AnalyticKernel, X, ζ, logα) = ρ(X, ζ, k, logα, wbs.workbufs, wbs.Kgrads)
 
-    flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, niter), Vector{Vector{T}}())
-
-    # minibatch_method = :neighborhood
-    # minibatch_method = :randompartitions
-    minibatch_method = :hybrid
-
-    # How many (center, random) points we take in a minibatch:
-    d_n = Dict(:neighborhood => (n, 0),
-               :hybrid => (min(n÷2, 96), n - min(n÷2, 96)),
-               :randompartitions => (0, n))
-
-    (nc, nr) = d_n[minibatch_method]
-
-    # minibatches
-    if minibatch_method in [:randompartitions, :hybrid]
-        all_s_rp = get_random_partitions(ndata, nr, niter)
-        all_s_rp = collect(eachrow(all_s_rp))
-    end
-    if minibatch_method in [:neighborhood, :hybrid]
-        buf = zeros(ndata, ndata)
-        Ω = similar(buf)
-        Z = similar(X)
-    end
+    flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, B.niter), Vector{Vector{T}}())
 
     # Reusable buffer to copy data to at each iteration
-    local_Xbuf = similar(X, (n, nλ))
+    local_Xbuf = similar(X, (B.n, nλ))
 
-    for i ∈ 1:niter
-        quiet || ((i % 500 == 0) && println("Training round $i/$niter"))
+    for i ∈ 1:B.niter
+        quiet || ((i % 500 == 0) && println("Training round $i/$(B.niter)"))
 
-        # Recalculate tree every now and then; otherwise correct
-        # observations are not picked
-        if i % 500 == 1 && minibatch_method in [:neighborhood,:hybrid]
-            Z .= X
-            Z .*= exp.(O.x[1:nλ])'
-            kernel_matrix_fast!(k, exp.(O.x[nλ+1:end]), Z, buf, Ω;
-                                precision = false)
-            # Sometimes most of the weights are zero and there are no
-            # n positive points in the selected row. We add eps to be
-            # able to sample those at random.
-            Ω .= abs.(Ω) .+ eps(T)
-        end
+        s = minibatch(B, exp.(O.x[1:nλ])) # Optimization is in log space
 
-        # Indexes for data in X below:
-        s = Int[]
-        if minibatch_method in [:randompartitions, :hybrid]
-            push!(s, all_s_rp[i]...)
-        end
-
-        if minibatch_method in [:neighborhood, :hybrid]
-            l = rand(1:ndata)
-            choices = setdiff(1:ndata,s) # don't re-select points already in s
-            push!(s, sample(choices, Weights(Ω[choices,l]), nc, replace = false)...)
-        end
-
-        s = unique(s)
         local_Xbuf .= @views X[s,:]
         ρval, grad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
         iterate!(O, grad) # update parameters in O.x

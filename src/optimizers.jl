@@ -8,7 +8,10 @@ abstract type AbstractOptimizer end
 
 
 mutable struct AMSGrad{T} <: AbstractOptimizer
-    x::Vector{T}
+    # const for safety: minibatching with MultiCenterMinibatch
+    # requires persistent pointers, so we make sure we don't change
+    # that.
+    const x::Vector{T}
     m::Vector{T}
     v::T
     vhat::T
@@ -19,7 +22,7 @@ mutable struct AMSGrad{T} <: AbstractOptimizer
 end
 
 
-function iterate!(O::AMSGrad{T}, g::Vector{T}) where T <: Real
+function iterate!(O::AMSGrad{T}, g::AbstractVector{T}) where T <: Real
     O.m = O.β1 * O.m + (one(T) - O.β1) * g
     O.v = O.β2 * O.v + (one(T) - O.β2) * dot(g,g) # g.^2
     O.vhat = max(O.vhat, O.v)
@@ -35,14 +38,14 @@ function AMSGrad(x_start::Vector{T};
 end
 
 
-mutable struct SGD{T} <: AbstractOptimizer
+struct SGD{T} <: AbstractOptimizer
     x::Vector{T}
     ϵ::T # learning rate
     fixed::Bool # if true, all steps are of length ϵ
 end
 
 
-function iterate!(O::SGD, g::Vector{T}) where T <: Real
+function iterate!(O::SGD, g::AbstractVector{T}) where T <: Real
     α = O.fixed ? sqrt(sum(g.^2) + 1e-9) : 1.0
     O.x .-= O.ϵ / α * g
 end
