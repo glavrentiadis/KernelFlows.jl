@@ -39,15 +39,23 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
                    kernel::Symbol,   # same kernel for all GPModels
                    G::GPGeometry{T}; # input-output mapping geometry
-                   Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters for input dimensions
-                   Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters, θ in rows
+                   kwargs...) where T <: Real
 
-                   transform_zy::Bool = false) where T <: Real
+    kernels = get_MVGP_kernels(kernel, G)
+    MVGPModel(X_tr, Y_tr, kernels, G; kwargs...)
+end
+
+
+function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
+                   Y_tr::Matrix{T},  # training outputs, data in rows
+                   kernels::Vector{H},   # same kernel for all GPModels
+                   G::GPGeometry{T}; # input-output mapping geometry
+                   Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters inputs
+                   Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters θ
+                   transform_zy::Bool = false) where {T<:Real,H<:Kernel}
 
     ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
-
-    kernels = get_MVGP_kernels(kernel, G)
 
     λs = (Λ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Λ))
     θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Ψ))
