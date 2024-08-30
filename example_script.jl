@@ -2,12 +2,12 @@
 # then writing add /path/to/KernelFlows.jl.
 
 # Also, you should add "using Revise" to your startup.jl, which in
-# Linux is at ~/.julia/startup.jl.
+# Linux is at ~/.julia/startup.jl. You need to import the KernelFlows
+# module with
 
-# Import module
 using KernelFlows
 
-# First you need to get data, into rows. Convention: inputs are X,
+# Then you need to load data into rows. Convention: inputs are X,
 # outputs are Y. _tr is training, _te is testing. Use NPZ for reading
 # nympy files, and DelimitedFiles for ascii data, etc. Look up online
 # for instructions. I usually write a file for reproducibility, with
@@ -47,11 +47,18 @@ MVM = MVGPModel(X_tr, Y_tr, :Matern32_analytic, G; transform_zy = false)
 # is the L2 loss (ρ_RMSE), but there are many more available such as
 # the Kernel Flows loss, ρ_KF.
 
-# There are two different ways to construct minibatches (multi-center
-# and random partitions), as well as two different optimizers (SGD,
-# AMSGrad) available. For the minibatching object what matters is the
-# minibatch type and size and number of iterations. For the optimizer
-# what matters most is the learning rate ϵ. We set those with
+# The quick & dirty way of training the model uses the defaults, while
+# overriding just the central parameters: number of iterations,
+# minibatch size, and learning rate. The call to traing looks like:
+
+train!(MVM; niter = 500, n = 128, ϵ = 1e-3)
+
+# This is enough in most settings. For more flexibility, there are two
+# different ways to construct minibatches (multi-center and random
+# partitions), as well as two different optimizers (SGD, AMSGrad)
+# available. For the minibatching object what matters is the minibatch
+# type and size and number of iterations. For the optimizer what
+# matters most is the learning rate ϵ. We set those with
 
 optargs = Dict(:ϵ => 1e-3) # see optimizers.jl for details
 mbargs = Dict(:niter => 700, :n => 64, :epoch_length => 500) # minibatching.jl
@@ -68,11 +75,11 @@ train!(MVM; ρ = ρ_RMSE, optalg = :AMSGrad, optargs, mbalg = :multicenter, mbar
 # matrix at the end, as that may be costly if there is a large number
 # of training data (over 10k). This is useful when one wants to do
 # repeated training while e.g. changing parameters from training to
-# training. To skip the inversion, just add skip_K_update = true to
+# training. To skip the inversion, just add update_K = false to
 # the train! kwargs:
 
 train!(MVM; ρ = ρ_RMSE, optalg = :AMSGrad, optargs,
-       mbalg = :multicenter, mbargs, skip_K_update = true)
+       mbalg = :multicenter, mbargs, update_K = false)
 
 # You can look at how the scaling factors (λ), kernel parameters (θ),
 # and loss function values changed during training, with
@@ -87,7 +94,10 @@ Y_te_pred = predict(MVM, X_te)
 # data a good starting point is looking at the 1-1 plot by something
 # like
 
-Plots.scatter(Y_te_pred, Y_te)
+scatter(Y_te_pred, Y_te)
+
+# The scatter() function is available from both Makie and Plots
+# packages.
 
 # There are some (somewhat immature) standard plotting functions
 # available in the parametric_plots.jl file. Some of the more useful

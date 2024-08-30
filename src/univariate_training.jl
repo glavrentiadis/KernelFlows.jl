@@ -61,14 +61,15 @@ end
 
 
 function best_α_from_flowres(flowres::FlowRes{T};
-                        navg::Union{Int, Nothing} = nothing,
-                        quiet::Bool = false) where T <: Real
+                             navg::Int = 0, quiet::Bool = false) where T <: Real
+    if navg == 0
+        bestidx = length(flowres.α_values)
+    else
+        bestidx = argmin(runningmedian(flowres.ρ_values, navg))
+    end
+    quiet || println("Selecting best index $bestidx")
 
-    navg == nothing && return flowres.α_values[end]
-
-    bestidx = argmin(runningmedian(flowres.ρ_values, navg))
-    println("Selecting best index $bestidx")
-    flowres.α_values[bestidx]
+    return flowres.α_values[bestidx]
 end
 
 
@@ -78,10 +79,10 @@ function train!(M::GPModel{T};
                 optargs::Dict{Symbol,H1} = Dict{Symbol,Any}(),
                 mbalg::Symbol = :multicenter,
                 mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
-                navg::Union{Nothing, Int} = nothing,
+                navg::Int = 0,
                 wbs::AbstractWorkBuffers = get_wbs(M, n),
-                quiet::Bool = false,
-                skip_K_update::Bool = false) where {T<:Real,H1<:Any,H2<:Any}
+                quiet::Bool = true,
+                update_K::Bool = true) where {T<:Real,H1<:Any,H2<:Any}
 
     logα = get_logα(M)
     nλ = length(M.λ)
@@ -99,7 +100,7 @@ function train!(M::GPModel{T};
         α = vcat(M.λ, M.θ)
     end
 
-    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], skip_K_update)
+    update_GPModel!(M; newλ = α[1:nλ], newθ = α[nλ+1:end], update_K)
     append!(M.ρ_values, flowres.ρ_values)
     append!(M.λ_training, [α[1:nλ] for α in flowres.α_values])
     append!(M.θ_training, [α[nλ+1:end] for α in flowres.α_values])
@@ -113,11 +114,20 @@ function train!(Ms::Vector{GPModel{T}};
                 optargs::Dict{Symbol,H1} = Dict{Symbol,Any}(),
                 mbalg::Symbol = :multicenter,
                 mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
-                navg::Union{Nothing, Int} = nothing, quiet::Bool = false,
-                skip_K_update::Bool = false) where {T<:Real,H1<:Any,H2<:Any}
+                n::Int = 0, # override :n in mbargs
+                niter::Int = 0, # override :niter in mbargs
+                ϵ::T = zero(T), # override :ϵ in mbargs
+                navg::Int = 0,
+                quiet::Bool = true,
+                update_K::Bool = true) where {T<:Real,H1<:Any,H2<:Any}
 
     nM = length(Ms)
     nα = maximum([length(M.λ) + 4 for M in Ms])
+
+    # Handle overriding parameters if those were supplied
+    (n != 0) && (mbargs[:n] = n)
+    (niter != 0) && (mbargs[:niter] = niter)
+    (ϵ != 0.) && (optargs[:ϵ] = ϵ)
 
     # n comes from the minibatch object that has not been constructed
     # yet. The default n_default is set in minibatching.jl
@@ -135,14 +145,14 @@ function train!(Ms::Vector{GPModel{T}};
 
     Threads.@threads :static for M in Ms
         tid = Threads.threadid()
-        train!(M; ρ, optalg, optargs, mbalg, mbargs, navg, skip_K_update = true,
+        train!(M; ρ, optalg, optargs, mbalg, mbargs, navg, update_K = false,
                wbs = all_wbs[tid], quiet)
         computed[Threads.threadid()] += 1
         print("\rCompleted $(sum(computed))/$nM tasks...")
     end
     println("done!\n")
 
-    update_GPModel!(Ms; skip_K_update)
+    update_GPModel!(Ms; update_K)
 
     quiet || print_parameters(Ms)
 end
@@ -156,9 +166,9 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
               k::Kernel,
               logα::Vector{T}; # log scaling parameters and kernel parameters
               O::AbstractOptimizer = AMSGrad(logα),
-              B::AbstractMinibatch = RandomPartitions(length(ζ), niter, n),
+              B::AbstractMinibatch = RandomPartitions(length(ζ), 1000, n_default),
               wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)), # buffers
-              quiet::Bool = false) where T <: Real
+              quiet::Bool = true) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
     ndata, nλ = size(X) # number of input dimensions

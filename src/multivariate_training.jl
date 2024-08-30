@@ -35,7 +35,7 @@ function train_L2_together!(MVM::MVGPModel{T};
                             Y_tr::Union{Nothing, AbstractMatrix{T}} = nothing,
                             optalg::Symbol = :AMSGrad,
                             optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                            niter::Int = 500, n::Int = 64, skip_K_update::Bool = false) where {T<:Real, H<:Any}
+                            niter::Int = 500, n::Int = 64, update_K::Bool = true) where {T<:Real, H<:Any}
 
     Random.seed!(1235)
     ndata, nZdims = size(MVM.Ms[1].Z) # number of data and input dimensions
@@ -132,7 +132,7 @@ function train_L2_together!(MVM::MVGPModel{T};
     end
     # Save results
     Threads.@threads for M in MVM.Ms
-        skip_K_update || update_GPModel!(M; newλ = M.λ_training[end], newθ = M.θ_training[end])
+        update_K && update_GPModel!(M; newλ = M.λ_training[end], newθ = M.θ_training[end])
     end
 
     # display(allgrads)

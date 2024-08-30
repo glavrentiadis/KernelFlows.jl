@@ -116,7 +116,7 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
                          optalg::Symbol = :AMSGrad,
                          optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
                          niter::Int = 500, n::Int = 64,
-                         skip_K_update::Bool = false) where {T<:Real, H<:Any}
+                         update_K::Bool = true) where {T<:Real, H<:Any}
 
     Random.seed!(1)
     ndata = length(MVMs[1].Ms[1].ζ)
@@ -207,5 +207,5 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
     end
 
     # Update model, and potentially each M.h
-    update_GPModel!(all_Ms; skip_K_update)
+    update_GPModel!(all_Ms; update_K)
 end

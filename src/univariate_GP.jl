@@ -75,14 +75,14 @@ default_θ(M::GPModel) = length(M.θ_training) == 0 ? M.θ : M.θ_training[end]
 
 """Updates 1-d GPmodel M after new parameters newλ and/or newθ have
    been obtained by training the model. Even if these parameters are
-   not given, M.h is recomputed, unless skip_K_update == true (it is
+   not given, M.h is recomputed, unless update_K == false (it is
    not computed when GPModel is initialized)."""
 function update_GPModel!(M::GPModel{T};
                          newλ::Vector{T} = default_λ(M),
                          newθ::Vector{T} = default_θ(M),
                          buf1::Union{Nothing, Matrix{T2}} = nothing,
                          buf2::Union{Nothing, Matrix{T2}} = nothing,
-                         skip_K_update::Bool = false) where {T<:Real,T2<:Real}
+                         update_K::Bool = true) where {T<:Real,T2<:Real}
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
@@ -97,7 +97,7 @@ function update_GPModel!(M::GPModel{T};
         M.θ .= newθ
     end
 
-    if !skip_K_update
+    if update_K
         # Allocate buffers
         ntr = length(M.ζ)
         H = Float64
@@ -124,14 +124,14 @@ end
 of them. The parameters are supplied in matrices. By default, the
 inverse covariance is recomputed using whatever parameter values are
 in the variables M.λ and M.θ"""
-function update_GPModel!(Ms::Vector{GPModel{T}}; skip_K_update::Bool = false) where T <: Real
+function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T <: Real
 
     nM = length(Ms)
     ndata = length(Ms[1].ζ)
     parallel = ndata < 10000
 
     txt1 = parallel ? "in parallel" : "serially"
-    txt2 = skip_K_update ? "Skip updating" : "Also updates"
+    txt2 = update_K ? "Also updates" : "Skip updating"
     println("Updating $(length(Ms)) GPs in $txt1. $txt2 K⁻¹y in M.h.")
 
     # Helper function for getting buffers
@@ -146,14 +146,14 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; skip_K_update::Bool = false) wh
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
             tid = Threads.threadid()
-            update_GPModel!(M; buf1 = buf1s[tid], buf2 = buf2s[tid], skip_K_update)
+            update_GPModel!(M; buf1 = buf1s[tid], buf2 = buf2s[tid], update_K)
             computed[Threads.threadid()] += 1
             print("\rCompleted $(sum(computed))/$nM tasks...")
         end
     else
         buf1, buf2 = u(ndata, 2)
         for (i,M) ∈ collect(enumerate(Ms))
-            update_GPModel!(M; skip_K_update, buf1, buf2)
+            update_GPModel!(M; update_K, buf1, buf2)
             print("\rCompleted $i/$nM tasks...")
     end
     end
