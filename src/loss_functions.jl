@@ -217,8 +217,7 @@ as the gradient of each observation with respect to the parameters
 logα"""
 function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AnalyticKernel,
                 logα::AbstractVector{T}, workbufs::Vector{Array{T}},
-                Kgrads::Vector{Matrix{T}}; predictonlycenter::Bool = true,
-                s_LOO::AbstractVector{Int} = Int[],
+                Kgrads::Vector{Matrix{T}}; s_LOO::AbstractVector{Int} = Int[],
                 return_components::Bool = false) where T <: Real
 
     n, nXdims = size(X)
@@ -427,4 +426,73 @@ function ρ_testloss(X::AbstractArray{T}, y::AbstractVector{T},
         tot += (h' * KI * ym - y[i])^2
     end
     return tot
+end
+
+
+
+function ρ_RMSE_no_LOO(X::AbstractArray{T}, y::AbstractVector{T},
+                       k::AnalyticKernel, logα::AbstractVector{T},
+                       workbufs::Vector{Array{T}},
+                       Kgrads::Vector{Matrix{T}}) where T <: Real
+    n, _ = size(X)
+    nα = length(logα)
+
+    # Split workbuf into the buffers that are needed below
+    K, KI, αgrad, vbuf1, vbuf2, vbuf3, k_Linbuf, k_Dbuf, k_Xbuf,
+        k_vbuf1, k_vbuf2, k_Mbuf1, k_Mbuf2, k_Mbuf3 = workbufs
+    k_workbufs = [k_Linbuf, k_Dbuf, k_Xbuf, k_vbuf1,
+                  k_vbuf2, k_Mbuf1, k_Mbuf2, k_Mbuf3]
+
+    # Get kernel matrix and its gradient wrt log in K and Kgrad.
+    k.K_and_∂K∂logα!(X, logα, K, Kgrads, k_workbufs)
+
+    κ = κ_default # set in minibatching.jl, optimally should be passed to ρ
+    ntr = n - κ
+
+    # Cholesky. Lower triangle was not touched by potrf!, so we can
+    # reuse that for h below.
+    Ktr = @views K[κ+1:end, κ+1:end]
+    (Ktr, info) = LAPACK.potrf!('U', Ktr)
+
+    gy = zeros(ntr)
+    gy .= y[κ+1:n]
+    gh = zeros(ntr, κ)
+    h = K[κ+1:n, 1:κ]
+    gh .= h
+
+    # These could be done together by hcat'ing y and h
+    @views LAPACK.potrs!('U', Ktr, gy)
+    @views LAPACK.potrs!('U', Ktr, gh)
+
+    # When training multiple MVMs together, buffers are sized
+    # according to the largest one. Hence, different number of input
+    # dimensions would lead to αgrad buffer of size of the largest
+    # one. We ensure correct gradient buffer here.
+    (length(αgrad) > nα) && (αgrad = @views αgrad[1:nα])
+    αgrad .= 0.0
+
+    r = @views h' * gy - y[1:κ]
+
+    ρtot = dot(r,r)
+
+    buf1_κ = zeros(κ)
+    buf2_κ = zeros(κ)
+    buf_ntr = zeros(ntr)
+
+    for i in 1:nα
+        hgrad = @views Kgrads[i][κ+1:end, 1:κ]
+        Kgrad = @views Kgrads[i][κ+1:end, κ+1:end]
+        t1 = BLAS.symv!('U', one(T), Kgrad, gy, zero(T), buf_ntr)
+
+        buf1_κ .= hgrad' * gy
+        buf1_κ .-= gh' * t1
+
+        buf2_κ .= h' * gy
+        buf2_κ .-= @views y[1:κ]
+
+        αgrad[i] = T(2) * dot(buf1_κ, buf2_κ)
+    end
+
+    ρtot / κ, αgrad ./ κ
+
 end

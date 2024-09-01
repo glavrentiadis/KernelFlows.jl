@@ -191,6 +191,8 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     # Empty buffers before starting new training
     zero_wbs!(wbs)
 
+    # N.B. multiplication with λ inside function arguments is not done
+    # for AnalyticKernels, unlike for AutodiffKernels.
     ξ_and_∇ξ(k::AnalyticKernel, X, ζ, logα) = ρ(X, ζ, k, logα, wbs.workbufs, wbs.Kgrads)
 
     flowres = FlowRes(Vector{Vector{Int}}(), zeros(T, B.niter), Vector{Vector{T}}())
@@ -204,8 +206,18 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
         s = minibatch(B, exp.(O.x[1:nλ])) # Optimization is in log space
 
         local_Xbuf .= @views X[s,:]
-        ρval, grad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
-        iterate!(O, grad) # update parameters in O.x
+        ρval, ξgrad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
+
+        # Debug the no-LOO loss by train!()'ing with ρ_RMSE and uncommenting:
+        # ξg_LOO = ξgrad[:] # Make a copy, as loss function overwrites this.
+        # rv, ξg_no_LOO = ρ_RMSE_no_LOO(local_Xbuf, ζ[s], k, O.x,
+        #                                  wbs.workbufs, wbs.Kgrads)
+        # println("\nLoss ratio with and without LOO:  $(ρval/rv).")
+        # println("Gradients with and without LOO, and difference in percents:")
+        # M = vcat(ξg_LOO', ξg_no_LOO', (1. .- abs.(ξg_LOO' ./ ξg_no_LOO')) .* 100)
+        # display(M)
+
+        iterate!(O, ξgrad) # update parameters in O.x
 
         # Debugging block if one wants to compare gradients from ξ_ref()
         # ρval_ref, gr_ref = ξ_and_∇ξ(k_ref, X[s,:], ζ[s], logα)
