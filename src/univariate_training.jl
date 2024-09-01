@@ -152,7 +152,10 @@ function train!(Ms::Vector{GPModel{T}};
     end
     println("done!\n")
 
-    update_GPModel!(Ms; update_K)
+    # No need to update anything if update_K is false, as the rest of
+    # update_K is run above by train!() in any case.
+    update_K && update_GPModel!(Ms; update_K)
+
 
     quiet || print_parameters(Ms)
 end
@@ -174,7 +177,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     ndata, nλ = size(X) # number of input dimensions
     O.x .= logα # set initial value, optimization in log space
     nα = length(logα)
-    reg = T(1e-7)
+    reg = T(1e-3)
 
     # Reference Matern kernels for debugging. Uncomment:
     k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)

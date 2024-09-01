@@ -33,7 +33,7 @@ end
 function pw_and_linear!(A::AbstractMatrix{T}, out1::AbstractMatrix{T}, out2::AbstractMatrix{T}, γ::T) where T <: Real
     BLAS.syrk!('U', 'N', T(-2), A, zero(T), out1)
     out2 .= out1 # copy to out2
-    out2 .*= -γ/T(2) # multiply out2 by -γ/2
+    out2 .*= -γ/T(2) # multiply out2 by -γ/2. out2 is now γAA'
     A .*= A # square of A
     a = sum(A, dims = 2)
     out1 .+= a
