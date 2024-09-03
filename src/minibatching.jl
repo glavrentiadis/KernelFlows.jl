@@ -96,7 +96,7 @@ function update_samples(B::MulticenterMinibatch, λ::Vector{T}) where T <: Real
     epoch_end = min(B.i + B.epoch_length - 1, B.niter) # don't go past niter
     for c in B.all_centers[B.i:epoch_end]
         # Get neighborhoods. B.κ first elements are the centers.
-        s_nbs = @views unique(vcat(c, knn(tree, B.X[c,:]', B.κ)[1]...))
+        s_nbs = @views unique(vcat(c, knn(tree, B.X[c,:]', B.nnb+1)[1]...))
         m = ndata - length(s_nbs) # number of points to sample global data from
         nglobal = B.n - length(s_nbs)
         r1 = randperm(m)[1:nglobal] # global data indexes
@@ -106,6 +106,20 @@ function update_samples(B::MulticenterMinibatch, λ::Vector{T}) where T <: Real
     end
     B.epoch_s = epoch_s
 end
+
+
+"""Test and plot results to verify that minibatching works as intended."""
+function test_Multicenter()
+    X = rand(1000,2)
+    κ = 3
+    B = KernelFlows.MulticenterMinibatch(X; n = 100, κ, niter = 100, nnb = 6)
+    s = KernelFlows.minibatch(B, ones(2))
+    Plots.scatter(X[s[κ+1:end],1], X[s[κ+1:end],2], label = "Minibatch / others")
+    Plots.scatter!(X[s[1:κ],1], X[s[1:κ],2], label = "Minibatch / centers")
+    sdiff = setdiff(1:1000,s)
+    Plots.scatter!(X[sdiff,1], X[sdiff,2], label = "Data not in minibatch", alpha = 0.1)
+end
+
 
 
 function get_minibatcher(mbalg::Symbol, X::AbstractArray{T};
