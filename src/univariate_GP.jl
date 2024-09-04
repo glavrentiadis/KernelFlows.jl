@@ -128,7 +128,7 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
 
     nM = length(Ms)
     ndata = length(Ms[1].ζ)
-    parallel = ndata < 10000
+    parallel = ndata < 10001
 
     txt1 = parallel ? "in parallel" : "serially"
     txt2 = update_K ? "Also updates" : "Skip updating"
