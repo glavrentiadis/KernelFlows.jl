@@ -190,7 +190,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     ξ(k::AutodiffKernel, X, ζ, logα) =
         ρ(X .* exp.(logα[1:nλ]'), ζ, k, logα[nλ+1:end]) +
         reg * sum(exp.(logα))
-    ∇ξ(k::AutodiffKernel, X, ζ, logα) = Zygote.gradient(logα -> ξ(k, X, ζ, logα), logα)
+      ∇ξ(k::AutodiffKernel, X, ζ, logα) = Zygote.gradient(logα -> ξ(k, X, ζ, logα), logα)
     ξ_and_∇ξ(k::AutodiffKernel, X, ζ, logα) = (ξ(k, X, ζ, logα), ∇ξ(k, X, ζ, logα)[1])
 
     # Empty buffers before starting new training
