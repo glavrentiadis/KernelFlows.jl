@@ -1,7 +1,7 @@
 name = "KernelFlows"
 uuid = "bb72a02f-58e8-4618-bba4-c562cfc9f034"
 authors = ["Jouni Susiluoto <jouni.i.susiluoto@jpl.nasa.gov>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 BaryRational = "91aaffc3-5777-4842-85b7-5d3d5d6a3494"
