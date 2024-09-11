@@ -60,6 +60,12 @@ function zero_wbs!(wbs::AnalyticWorkBuffers{T}) where T <: Real
 end
 
 
+total_wbsize_MB(all_wbs::Vector{H}) where H <: AbstractWorkBuffers = 0
+function total_wbsize_MB(all_wbs::Vector{AnalyticWorkBuffers})
+    size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...)) ÷ 2^20
+end
+
+
 function best_α_from_flowres(flowres::FlowRes{T};
                              navg::Int = 0, quiet::Bool = false) where T <: Real
     if navg == 0
@@ -133,8 +139,7 @@ function train!(Ms::Vector{GPModel{T}};
     # yet. The default n_default is set in minibatching.jl
     n = :n in keys(mbargs) ? mbargs[:n] : n_default
     all_wbs = [get_wbs(Ms[1].kernel, n, nα) for _ in 1:Threads.nthreads()]
-    size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...))
-    size_MB = size_alloc ÷ 2^20
+    size_MB = total_wbsize_MB(all_wbs)
 
     println("Training $nM univariate GPs.")
     println("Buffers allocated for all threads: $size_MB MB.")
