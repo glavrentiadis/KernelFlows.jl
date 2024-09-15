@@ -98,6 +98,7 @@ function update_samples(B::MulticenterMinibatch, λ::Vector{T}) where T <: Real
     for c in B.all_centers[B.i:epoch_end]
         # Get neighborhoods. B.κ first elements are the centers.
         s_nbs = @views unique(vcat(c, knn(tree, B.X[c,:]', B.nnb+1)[1]...))
+        s_nbs = @views s_nbs[1:min(B.n,length(s_nbs))] # limit to number of sample points
         m = ndata - length(s_nbs) # number of points to sample global data from
         nglobal = B.n - length(s_nbs)
         r1 = randperm(m)[1:nglobal] # global data indexes
