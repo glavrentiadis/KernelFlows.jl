@@ -32,10 +32,29 @@ end
    training."""
 function kernel_matrix(k::BinaryKernel, logθ::AbstractVector{T}, X::AbstractArray{T}) where T <: Real
 
+    #evaluate kernel function
     K = hcat([[k.k(x, y, exp.(logθ[1:end-1])) for y in eachrow(X)] for x in eachrow(X)]...)
-    # Add nugget
+       
+    #add nugget
     δ = max(exp(-15.), exp(logθ[end]))
     K += Diagonal(δ * ones(size(X)[1]))
+    
+    return K
+end
+
+
+"""Compute kernel matrix for binary kernels; no inversion. This
+   function is autodifferentiable with Zygote and used for
+   training."""
+function kernel_matrix(k::BinaryVectorizedKernel, logθ::AbstractVector{T}, X::AbstractArray{T}) where T <: Real
+
+    #evaluate kernel function
+    K = k.k(X, X, exp.(logθ[1:end-1]))
+       
+    #add nugget
+    δ = max(exp(-15.), exp(logθ[end]))
+    K += Diagonal(δ * ones(size(X)[1]))
+    
     return K
 end
 

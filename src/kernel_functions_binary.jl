@@ -14,6 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+using KernelFunctions 
 
 """Linear kernel (with mean) for testing BinaryKernel
 correctness. This kernel also includes the mean, which is given as the
@@ -21,45 +22,90 @@ log of the θ, since θ are always positive. θ[1] is the weight of the
 kernel, and θ[end] is the weight of the nugget (this is always the
 case). Therefore we have n+2 parameters for this kernel, with n the
 number of input dimensions."""
-function binary_linear_mean(x1::AbstractVector{T}, x2::AbstractVector{T},
-                     θ::AbstractVector{T}) where T <: Real
+function linear_mean_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
+                            θ::AbstractVector{T})::T where T <: Real
     # Note that kernel_matrix_...() functions do not pass along the
     # last entry of θ, as that's always the nugget. Hence the θ here
     # is only n+1 entries long, not n+1 like in BinaryKernel.θ_start
-    μ = log.(θ[2:end])
+    
+    μ = @views log.(θ[2:end])
 
-    θ[1] * (x1 - μ)' * (x2 - μ)
+    return θ[1] * (x1 - μ)' * (x2 - μ)
 end
 
+function linear_mean_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                            θ::AbstractVector{T})::AbstractMatrix{T} where T <: Real
+
+    #mean
+    μ = @views log.(θ[2:end])
+
+    #evaluate kernel matrix
+    return linear_binary(X1 .- μ, X2 .- μ, θ[2:end])
+end
 
 """Binary linear binary kernel, but without mean"""
-function binary_linear(x1::AbstractVector{T}, x2::AbstractVector{T},
-                θ::AbstractVector{T}) where T <: Real
-    θ[1] * x1' * x2
+function linear_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
+                       θ::AbstractVector{T})::T where T <: Real
+    
+    return θ[1] * x1' * x2
+end
+
+function linear_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                       θ::AbstractVector{T})::AbstractMatrix{T} where T <: Real
+
+    #hyperparameters
+    σ² = @views θ[1]
+
+    #define kernel function 
+    k = σ² * LinearKernel()
+
+    #evaluate kernel matrix
+    return kernelmatrix(k, RowVecs(X1), RowVecs(X2)) 
 end
 
 """Binary group kernel, with a correlation scale σ"""
-function binary_group(x1::Union{AbstractVector{T}, T}, x2::Union{AbstractVector{T}, T}, 
-                     θ; tol=1e-6) where T <: Real
+function group_binary(x1::Union{AbstractMatrix{T}, T}, x2::Union{AbstractMatrix{T}, T}, 
+                     θ::AbstractVector{T}; δ=1e-6)::T where T <: Real
     
-    #hyperparameters
-    σ = θ
     #evaluate kernel matrix
-    K_grp =  norm(x1 .- x2) < tol ? σ^2 : 0.
+    return norm(x1 .- x2) < δ ? θ : 0.
+end
 
-    return K_grp
+function group_binary(X1::Union{AbstractVector{T}, T}, X2::Union{AbstractVector{T}, T}, 
+                      θ::AbstractVector{T}; δ=1e-6)::AbstractMatrix{T} where T <: Real
+
+    #hyperparameters
+    σ² = @views θ[1]
+
+    #define kernel function 
+    k = σ² * WhiteKernel()
+
+    #evaluate kernel matrix
+    return kernelmatrix(k, RowVecs(X1), RowVecs(X2)) 
 end
 
 """Binary exponential kernel, with a correlation scale σ and lenght λ parameters"""
-function binary_exp(x1::AbstractVector{T}, x2::AbstractVector{T},
-                    θ::AbstractVector{T}) where T <: Real
-    
+function spherical_exp_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
+                              θ::AbstractVector{T})::T where T <: Real
+    println("unvectorized2")
     #hyperparameters
-    σ = θ[1]
-    λ = θ[2]
-    #evaluate kernel matrix
-    K_nexp = σ^2 * exp( λ * norm(x1 .- x2) )
+    σ² = @views θ[1]
+    λ  = @views θ[2]
 
     #evaluate kernel matrix
-    return K_nexp
+    return σ² * exp(-λ * norm(x1 .- x2) )
+end
+
+function spherical_exp_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                              θ::AbstractVector{T})::AbstractMatrix{T} where T <: Real
+
+    #hyperparameters
+    σ² = @views θ[1]
+    λ  = @views θ[2]
+
+    #define kernel function 
+    k = σ² * ExponentialKernel(; metric=Euclidean()) ∘ ScaleTransform(λ)
+
+    #evaluate kernel matrix
+    return kernelmatrix(k, RowVecs(X1), RowVecs(X2))
 end
