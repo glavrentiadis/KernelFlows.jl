@@ -87,7 +87,7 @@ end
 """Binary exponential kernel, with a correlation scale σ and lenght λ parameters"""
 function spherical_exp_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
                               θ::AbstractVector{T})::T where T <: Real
-    println("unvectorized2")
+    
     #hyperparameters
     σ² = @views θ[1]
     λ  = @views θ[2]
