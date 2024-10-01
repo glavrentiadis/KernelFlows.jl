@@ -87,7 +87,7 @@ end
 """Binary exponential kernel, with a correlation scale σ and lenght λ parameters"""
 function spherical_exp_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
                               θ::AbstractVector{T})::T where T <: Real
-    println("unvectorized2")
+
     #hyperparameters
     σ² = @views θ[1]
     λ  = @views θ[2]
@@ -95,6 +95,7 @@ function spherical_exp_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
     #evaluate kernel matrix
     return σ² * exp(-λ * norm(x1 .- x2) )
 end
+
 
 function spherical_exp_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
                               θ::AbstractVector{T})::AbstractMatrix{T} where T <: Real
@@ -109,3 +110,6 @@ function spherical_exp_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
     #evaluate kernel matrix
     return kernelmatrix(k, RowVecs(X1), RowVecs(X2))
 end
+
+#add kernels specific to ngmm
+include("kernel_functions_binary_seismic.jl")

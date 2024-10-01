@@ -46,11 +46,20 @@ function save_kernel(U::UnaryKernel, G::JLD2.Group)
     G["kerneltype"] = "UnaryKernel"
 end
 
+
 function save_kernel(B::BinaryKernel, G::JLD2.Group)
     G["k"] = string(B.k)
     G["theta_start"] = B.θ_start
     G["kerneltype"] = "BinaryKernel"
 end
+
+
+function save_kernel(B::KernelFlows.BinaryVectorizedKernel, G::JLD2.Group)
+    G["k"] = string(B.k)
+    G["theta_start"] = B.θ_start
+    G["kerneltype"] = "BinaryVectorizedKernel"
+end
+
 
 function save_kernel(A::AnalyticKernel, G::JLD2.Group)
     G["K_and_∂K∂logα!"] = string(A.K_and_∂K∂logα!)
@@ -81,16 +90,37 @@ function load_binary_kernel(G::JLD2.Group, kerneltable::Dict)
 end
 
 
+function load_binary_vectorized_kernel(G::JLD2.Group, kerneltable::Dict)
+    k = kerneltable[G["k"]]
+    θ_start = G["theta_start"]
+    BinaryKernel(k, θ_start)
+end
+
+
 """Load UnaryKernel kernel from a JLD2.Group. Other types of kernels
 need other implementations, choosing between which then needs to be
 handled in load_GPModel()"""
 function load_kernel(G::JLD2.Group)
-    kerneltable = Dict("Matern32" => Matern32,
-                       "Matern52" => Matern52,
-                       "inverse_quadratic" => inverse_quadratic,
-                       "spherical_exp" => spherical_exp,
-                       "spherical_sqexp" => spherical_sqexp,
-                       "Matern32_αgrad!" => Matern32_αgrad!)
+    kerneltable = Dict("Matern32"                    => Matern32,
+                       "Matern52"                    => Matern52,
+                       "inverse_quadratic"           => inverse_quadratic,
+                       "spherical_exp"               => spherical_exp,
+                       "spherical_sqexp"             => spherical_sqexp,
+                       "Matern32_αgrad!"             => Matern32_αgrad!,
+                       "linear_binary"               => linear_binary,
+                       "linear_mean_binary"          => linear_mean_binary,
+                       "group_binary"                => group_binary,
+                       "spherical_exp_binary"        => spherical_exp_binary, 
+                       "source_binary"               => source_binary,
+                       "path_binary"                 => path_binary,
+                       "site_binary"                 => site_binary,
+                       "sourcesite_binary"           => sourcesite_binary,
+                       "pathsite_binary"             => pathsite_binary,
+                       "sourcepathsite_binary"       => sourcepathsite_binary,
+                       "site_aleat_binary"           => site_aleat_binary,
+                       "sourcesite_aleat_binary"     => sourcesite_aleat_binary,
+                       "pathsite_aleat_binary"       => pathsite_aleat_binary,
+                       "sourcepathsite_aleat_binary" => sourcepathsite_aleat_binary)
 
     # Default to UnaryKernel for loading legacy emulators
     kt = "kerneltype" in keys(G) ? G["kerneltype"] : "UnaryKernel"
@@ -101,6 +131,8 @@ function load_kernel(G::JLD2.Group)
         k = load_unary_kernel(G, kerneltable)
     elseif kt == "BinaryKernel"
         k = load_binary_kernel(G, kerneltable)
+    elseif kt == "BinaryVectorizedKernel"
+        k = load_binary_vectorized_kernel(G, kerneltable)
     end
 
     k
@@ -223,7 +255,15 @@ function load_MVGPModel(fname::String; grpname::Union{Nothing, String} = nothing
     local MVM
 
     jldopen(fname, "r") do file
+        println(fname)
         grp = (grpname == nothing) ? file.root_group : file[grpname]
+        display(grp)
+        println(grpname)
+        
+        # println(file[grpname])
+        println(file.root_group)
+        # blah
+        grp = file.root_group
         MVM = load_MVGPModel(grp)
     end
 
