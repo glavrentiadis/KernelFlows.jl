@@ -14,6 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
+
 using KernelFunctions 
 
 """Linear kernel (with mean) for testing BinaryKernel
@@ -64,15 +65,16 @@ function linear_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
 end
 
 """Binary group kernel, with a correlation scale σ"""
-function group_binary(x1::Union{AbstractMatrix{T}, T}, x2::Union{AbstractMatrix{T}, T}, 
+function group_binary(x1::T, x2::T, 
                      θ::AbstractVector{T}; δ=1e-6)::T where T <: Real
     
     #evaluate kernel matrix
     return norm(x1 .- x2) < δ ? θ : 0.
 end
 
-function group_binary(X1::Union{AbstractVector{T}, T}, X2::Union{AbstractVector{T}, T}, 
-                      θ::AbstractVector{T}; δ=1e-6)::AbstractMatrix{T} where T <: Real
+function group_binary(X1::Union{AbstractVector{T}, AbstractMatrix{T}},
+                      X2::Union{AbstractVector{T}, AbstractMatrix{T}},
+                      θ; δ=1e-6)::AbstractMatrix{T} where T <: Real
 
     #hyperparameters
     σ² = @views θ[1]

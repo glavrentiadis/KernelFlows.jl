@@ -60,6 +60,7 @@ end
 function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:linear_binary        => linear_binary,
              :linear_mean_binary   => linear_mean_binary,
+             :group_binary         => group_binary,
              :spherical_exp_binary => spherical_exp_binary)
     if s  == :linear_binary
         θ₀_B = [exp.([0., -7.]) for XP in G.Xprojs]
@@ -69,6 +70,8 @@ function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
         for θ in θ₀list
             θ[end] = exp(-7.0)
         end
+    elseif s == :group_binary
+        θ₀_B = T.(exp.([0., -7.]))
     else
         θ₀_B = T.(exp.([0., 0., -7.]))
     end
@@ -76,9 +79,21 @@ function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
 end
 
 function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
-    d = Dict(:linear_binary        => linear_binary,
-             :linear_mean_binary   => linear_mean_binary,
-             :spherical_exp_binary => spherical_exp_binary)
+    d = Dict(:linear_binary               => linear_binary,
+             :linear_mean_binary          => linear_mean_binary,
+             :group_binary                => group_binary,
+             :spherical_exp_binary        => spherical_exp_binary, 
+             :source_binary               => source_binary,
+             :path_binary                 => path_binary,
+             :site_binary                 => site_binary,
+             :sourcesite_binary           => sourcesite_binary,
+             :pathsite_binary             => pathsite_binary,
+             :sourcepathsite_binary       => sourcepathsite_binary,
+             :site_aleat_binary           => site_aleat_binary,
+             :sourcesite_aleat_binary     => sourcesite_aleat_binary,
+             :pathsite_aleat_binary       => pathsite_aleat_binary,
+             :sourcepathsite_aleat_binary => sourcepathsite_aleat_binary
+             )
     if s  == :linear_binary
         θ₀_B = [exp.([0., -7.]) for XP in G.Xprojs]
     elseif s == :linear_mean_binary
@@ -87,9 +102,22 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
         for θ in θ₀list
             θ[end] = exp(-7.0)
         end
+    elseif s == :group_binary
+        θ₀_B = T.(exp.([0., -7.]))
+    elseif s == :pathsite_binary || s == :sourcesite_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., -7.]))
+    elseif s == :sourcepathsite_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., -7.]))
+    elseif s == :site_aleat_binary || s == :source_aleat_binary
+        θ₀_B = T.(exp.([0., 0., -7., -7.]))
+    elseif s == :pathsite_aleat_binary || s == :sourcesite_aleat_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., -7., -7.]))
+    elseif s == :sourcepathsite_aleat_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., -7., -7.]))
     else
         θ₀_B = T.(exp.([0., 0., -7.]))
     end
+
     return [BinaryVectorizedKernel(d[s], θ₀_B) for XP in G.Xprojs]
 end
 
@@ -100,13 +128,19 @@ function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
 end
 
 function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
-
+    
     unary_kernels = [:spherical_sqexp, :spherical_exp,
                      :Matern32, :Matern52, :inverse_quadratic]
     binary_vkernels = [:linear_binary, :linear_mean_binary, 
-                       :spherical_exp_binary, :group_binary]
+                       :group_binary, :spherical_exp_binary,
+                       :source_binary, :path_binary, :site_binary, 
+                       :sourcesite_binary, :pathsite_binary,
+                       :sourcepathsite_binary,
+                       :site_aleat_binary, :path_aleat_binary, :source_aleat_binary, 
+                       :sourcesite_aleat_binary, :pathsite_aleat_binary,
+                       :sourcepathsite_aleat_binary]
     binary_kernels = [:linear_binary, :linear_mean_binary, 
-                      :spherical_exp_binary, :group_binary]
+                      :group_binary, :spherical_exp_binary]
     analytic_kernels = [:Matern32_analytic]
 
     s in unary_kernels    && (return get_UnaryKernel(s,G))
