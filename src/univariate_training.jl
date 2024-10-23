@@ -61,7 +61,7 @@ end
 
 
 total_wbsize_MB(all_wbs::Vector{H}) where H <: AbstractWorkBuffers = 0
-function total_wbsize_MB(all_wbs::Vector{AnalyticWorkBuffers})
+function total_wbsize_MB(all_wbs::Vector{AnalyticWorkBuffers{T}}) where T <: Real
     size_alloc = sum(vcat([sizeof.(aw.workbufs) for aw in all_wbs]...)) ÷ 2^20
 end
 
