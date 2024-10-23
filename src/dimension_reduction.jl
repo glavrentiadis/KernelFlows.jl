@@ -45,6 +45,60 @@ struct GPGeometry{T}
 end
 
 
+"""Combines a vector of Projections into a single Projection. This is
+a helper function for combining multiple GPGeometry objects
+together."""
+function combine(Ps::Vector{Projection{T}}) where T <: Real
+    vectors = hcat([P.vectors for P in Ps]...)
+    values = vcat([P.values for P in Ps]...)
+    dummydims = vcat([P.spec.dummydims for P in Ps]...)
+    ndummy = length(dummydims)
+
+    # To get sparsedims right, we have to do compute offsets so that
+    # we don't include dimensions twice, which would break reduce_Y()
+    s = [0, cumsum([length(P.values) for P in Ps])...]
+    sparsedims = vcat([P.spec.sparsedims .+ s[i] for (i,P) in enumerate(Ps)]...)
+
+    nCCA = sum([P.spec.nCCA for P in Ps])
+    nPCA = sum([P.spec.nPCA for P in Ps])
+    spec = ProjectionSpec(nCCA, nPCA, ndummy, dummydims, sparsedims)
+    Projection(vectors, values, spec)
+end
+
+
+"""Combine a number of GPGeometry structs into a single one. Typically
+this would be used to combine GPGeometry objects that were constructed
+using disjoint Ydims kwargs (no overlapping dimensions). There are no
+automatic checks to ensure this disjointedness. The motivation behind
+such a construct comes from when different kinds of dimension
+reduction are needed for different parts of the state vector."""
+function combine(Gs::Vector{GPGeometry{T}}) where T <: Real
+    Yproj = combine([G.Yproj for G in Gs])
+    Xprojs = vcat([G.Xprojs for G in Gs]...)
+
+    μX = Gs[1].μX
+    σX = Gs[1].σX
+    μY = Gs[1].μY
+
+    # Y data should be the same for all G in Gs, so the mean of Y
+    # should also be the same, modulo random sampling
+    σY = Gs[1].σY # Straight from data; not effected by Ydims.
+
+    # NOTE! for the following, we only record one value, even though
+    # many might have been used for getting the different Gs.G. These
+    # are anyway recorded for diagnostic purposes only.
+    reg_CCA = Gs[1].reg_CCA
+    Xtransfspec = Gs[1].Xtransfspec
+
+    GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA, Xtransfspec)
+end
+
+
+function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T}, D::Vector) where T <: Real
+    combine([dimreduce(X, Y; d...) for d in D])
+end
+
+
 """Construct GPDimensionMap for diagonal univariate GPs.:
 
 Don't change Y dimensions apart from centering and scaling (one 1-d GP
@@ -60,6 +114,7 @@ julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
 """
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    Xtransf_deg::Int = 0, Xtransf_ϵ::Real = 1e-2,
+                   Ydims::AbstractVector{Int} = 1:size(Y)[2],
                    nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
                    reg_CCA::Real = 1e-2, reg_CCA_X::Real = reg_CCA,
@@ -77,15 +132,16 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
 
     # Do not use more CCA / PCA dims than there are dimensions
-    nYCCA = min(nYCCA, size(Y)[2])
-    nYPCA = min(nYPCA, size(Y)[2] - nYCCA)
+    nY_full = length(Ydims) # only these can be non-constant
+    nYCCA = min(nYCCA, nY_full)
+    nYPCA = min(nYPCA, nY_full - nYCCA)
     nYCCA == 0 && (reg_CCA = zero(T))
 
     # If there are no CCA or PCA output vectors, we don't do any
     # transforms but model the data directly in the original
     # dimensions. If there are any CCA or PCA Y-dimensions, no dummy
     # Y-dimensions will be used.
-    nYdummy = nYCCA + nYPCA == 0 ? size(Y)[2] : 0
+    nYdummy = nYCCA + nYPCA == 0 ? nY_full : 0
 
     nX = nXCCA + length(dummyXdims) # total number of transformed inputs
     nY = nYCCA + nYPCA + nYdummy # total number of transformed outputs
@@ -96,25 +152,36 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     X = X[s,:]
     Y = Y[s,:]
 
-    # Center and scale data
+    # Get mean and standard deviation for centering and scaling data
     μX = mean(X, dims = 1)[:]
     μY = mean(Y, dims = 1)[:]
     σX = std(X, dims = 1)[:]
 
-    # Avoid NaNs for constant input dimensions (corner case)
-    σX[σX .== 0] .= 1.
-
-    σY = scale_Y ? std(Y, dims = 1)[:] : ones(T, size(Y)[2])
+    # No special handling for YdimsC dimensions, so that σY should be
+    # the same, no matter what Ydims kwarg was given.
+    σY = std(Y, dims = 1)[:]
 
     # Don't scale dimensions with zero variance to avoid NaNs
-    Xnonconstdims = σX .!= 0.
-    Ynonconstdims = σY .!= 0.
+    Xnonconstdims = (σX .!= 0.)
+    Ynonconstdims = (σY .!= 0.)
 
-    σY .= max.(1e-6, σY)
-    σY .= min.(1e6, σY)
+    # Override Y scaling if scale_Y = false
+    if !scale_Y
+        σY[Ynonconstdims] .= 1.0
+    end
 
-    X[:,Xnonconstdims] .= (X .- μX')[:,Xnonconstdims] ./ σX[Xnonconstdims]'
-    Y[:,Ynonconstdims] .= (Y .- μY')[:,Ynonconstdims] ./ σY[Ynonconstdims]'
+    σY .= max.(eps(T), σY) # reduce() divides by σY
+    σY .= min.(1e6, σY) # also avoid crazily large values
+
+    X .= X .- μX'
+    Y .= Y .- μY'
+    X[:,Xnonconstdims] ./= σX[Xnonconstdims]'
+    Y[:,Ynonconstdims] ./= σY[Ynonconstdims]'
+
+    # Set non-selected dimensions to zero. Any predictions will then
+    # be just μY. C stands for complement.
+    YdimsC = setdiff(1:size(Y)[2], Ydims)
+    Y[:, YdimsC] .= 0
 
     Y_unreduced = Y[:,:]
 
@@ -315,7 +382,7 @@ end
 
 
 function recover_Y(Z::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
-    recover(Z, G.Yproj, G.μY,  G.σY)
+    recover(Z, G.Yproj, G.μY, G.σY)
 end
 
 """Function to recover just one vector / scalar. As we return just one
