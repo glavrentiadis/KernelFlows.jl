@@ -110,15 +110,37 @@ end
 
 
 """Test and plot results to verify that minibatching works as intended."""
-function test_Multicenter()
+function test_Multicenter(; p = Plots.plot())
     X = rand(1000,2)
-    κ = 3
-    B = KernelFlows.MulticenterMinibatch(X; n = 100, κ, niter = 100, nnb = 6)
-    s = KernelFlows.minibatch(B, ones(2))
-    Plots.scatter(X[s[κ+1:end],1], X[s[κ+1:end],2], label = "Minibatch / others")
-    Plots.scatter!(X[s[1:κ],1], X[s[1:κ],2], label = "Minibatch / centers")
+    λ = rand(2)
+    κ = 5
+    # B = KernelFlows.MulticenterMinibatch(X; n = 100, κ, niter = 100, nnb = 6)
+    B = KernelFlows.MulticenterMinibatch(X; n = 10, κ, niter = 100) # , nnb = 6)
+    s = KernelFlows.minibatch(B, λ)
+    Plots.scatter!(p, X[s[κ+1:end],1], X[s[κ+1:end],2], label = "Minibatch / others")
+    Plots.scatter!(p, X[s[1:κ],1], X[s[1:κ],2], label = "Minibatch / centers")
     sdiff = setdiff(1:1000,s)
-    Plots.scatter!(X[sdiff,1], X[sdiff,2], label = "Data not in minibatch", alpha = 0.1)
+    Plots.plot!(p, xticks = [], yticks = [])
+
+    Plots.scatter!(p, X[sdiff,1], X[sdiff,2], label = "Data not in minibatch", alpha = 0.1, color = :gray)
+end
+
+"""Test and plot results to verify that minibatching works as intended."""
+function test_RandomPartitions(; p = Plots.plot())
+    X = rand(1000,2)
+    λ = rand(2)
+    κ = 3
+    B = RandomPartitions(X .* λ'; n = 100, niter = 1000, κ)
+    s1 = minibatch(B, ones(2))
+    s2 = minibatch(B, ones(2))
+    s3 = minibatch(B, ones(2))
+    Plots.scatter!(p, X[s1,1], X[s1,2], label = "First minibatch")
+    Plots.scatter!(p, X[s2,1], X[s2,2], label = "Second minibatch")
+    Plots.scatter!(p, X[s3,1], X[s3,2], label = "Third minibatch")
+    sdiff = setdiff(1:1000,vcat(s1, s2, s3))
+    Plots.plot!(p, xticks = [], yticks = [])
+
+    Plots.scatter!(p, X[sdiff,1], X[sdiff,2], label = "Data not in minibatches 1-3", alpha = 0.1)
 end
 
 
