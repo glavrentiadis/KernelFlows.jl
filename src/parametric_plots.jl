@@ -54,7 +54,7 @@ function quantileplot!(ax::Makie.Axis, Y_te::AbstractMatrix{T}, Y_te_pred::Abstr
     Makie.xlims!(ax, extrema(x))
 end
 
-function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
+function plot_training(MVM::MVGPModel; p = nothing, title = "")
 
     nY = length(MVM.Ms)
     nYCCA = MVM.G.Yproj.spec.nCCA
@@ -63,12 +63,12 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "Training results")
     r = length(MVM.Ms[1].ρ_values)
     m = r > 1000 ? splitrange(1, r, 1000) : 1:r
 
-    xlabels1 = ["CC $i (w=$(round(MVM.G.Yproj.values[i], sigdigits=2)))" for i in 1:nYCCA]
-    xlabels2 = ["PC $i (w=$(round(MVM.G.Yproj.values[i+nYCCA], sigdigits=2)))" for i in 1:nYPCA]
+    xlabels1 = ["$(round(MVM.G.Yproj.values[i], sigdigits=2))" for i in 1:nYCCA]
+    xlabels2 = ["$(round(MVM.G.Yproj.values[i+nYCCA], sigdigits=2))" for i in 1:nYPCA]
     xl = [xlabels1..., xlabels2...]
 
     p == nothing && (p = Plots.plot(layout = grid(3, nY, heights = [0.4, 0.4, 0.2]),
-                                    size = (2400, 800), plot_title = title)) # , link = :both)
+                                    size = (2400, 800), xrotation = 70, link = :both))
 
     for i in 1:3nY
         # no y tick labels for columns >1
