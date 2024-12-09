@@ -93,24 +93,46 @@ function combine(Gs::Vector{GPGeometry{T}}) where T <: Real
     GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA, Xtransfspec)
 end
 
-
+"""Use different dimension reduction specifications for different
+parts of the state. See docstring of combine() for further
+details. Each element of D should specify a unique Ydims range."""
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T}, D::Vector) where T <: Real
     combine([dimreduce(X, Y; d...) for d in D])
 end
 
 
-"""Construct GPDimensionMap for diagonal univariate GPs.:
+"""Regular dimreduce(), but with kwargs given as a Dict"""
+function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T},
+                   drargs::Dict{Symbol,H}) where {H,T<:Real}
+    dimreduce(X, Y; drargs...)
+end
 
-Don't change Y dimensions apart from centering and scaling (one 1-d GP
-for each column in Y). Uses whatever defaults are in place for X.
 
-julia> dimreduce(X, Y)
+"""Construct GPGeometry object that describes the geometry of the
+multivariate GP in terms of a number of univariate GPs. Examples:
 
-3 CCA and 3 PCA dimensions for Y, and use 2 CCA vectors on the input
-side for each of these 6 dimensions. Augment the input side with first
-five X dimensions.
+1) Don't change Y dimensions apart from centering and scaling (one 1-d
+   GP for each column in Y). Uses whatever defaults are in place for
+   X.
 
-julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
+   julia> dimreduce(X, Y)
+
+2) Use 3 CCA and 3 PCA dimensions for Y, and use 2 CCA vectors on the
+   input side for each of these 6 dimensions. Augment the input side
+   with first five X dimensions.
+
+   julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = 1:5)
+
+3) Same as before, but use all X dims for augmentation
+
+   julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = true)
+
+4) Same as above, but also scale output dimensions to unit variance
+   and treat everything outside dimensions 3 to 5 as constant:
+
+   julia> dimreduce(X, Y; nYCCA = 3, nYPCA = 3, nXCCA = 2, dummyXdims = true,
+                    scale_Y = true, Ydims = 3:5)
+
 """
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    Xtransf_deg::Int = 0, Xtransf_ϵ::Real = 1e-2,
