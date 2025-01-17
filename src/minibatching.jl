@@ -118,16 +118,19 @@ end
 function test_Multicenter(; p = Plots.plot())
     X = rand(1000,2)
     λ = rand(2)
-    κ = 5
-    # B = KernelFlows.MulticenterMinibatch(X; n = 100, κ, niter = 100, nnb = 6)
-    B = KernelFlows.MulticenterMinibatch(X; n = 10, κ, niter = 100) # , nnb = 6)
+    ll = round.(λ; sigdigits = 2)
+    κ = 4
+    B = KernelFlows.MulticenterMinibatch(X; n = 50, κ, niter = 100) # , nnb = 6)
     s = KernelFlows.minibatch(B, λ)
-    Plots.scatter!(p, X[s[κ+1:end],1], X[s[κ+1:end],2], label = "Minibatch / others")
-    Plots.scatter!(p, X[s[1:κ],1], X[s[1:κ],2], label = "Minibatch / centers")
-    sdiff = setdiff(1:1000,s)
-    Plots.plot!(p, xticks = [], yticks = [])
+    nnb_tot = B.nnb * κ
 
+    Plots.plot!(p, title = "x-y scaling parameters: $(ll[1]), $(ll[2])")
+    Plots.scatter!(p, X[s[1:κ],1], X[s[1:κ],2], label = "Minibatch / centers")
+    Plots.scatter!(p, X[s[κ+1:κ + 1 + nnb_tot],1], X[s[κ+1:κ + 1 + nnb_tot],2], label = "Minibatch / neighbors")
+    Plots.scatter!(p, X[s[κ+1+nnb_tot:end],1], X[s[κ+1+nnb_tot:end],2], label = "Minibatch / others")
+    sdiff = setdiff(1:1000,s)
     Plots.scatter!(p, X[sdiff,1], X[sdiff,2], label = "Data not in minibatch", alpha = 0.1, color = :gray)
+    Plots.plot!(p, xticks = [], yticks = [])
 end
 
 """Test and plot results to verify that minibatching works as intended."""
