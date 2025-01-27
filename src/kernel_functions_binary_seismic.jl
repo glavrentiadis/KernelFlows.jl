@@ -30,268 +30,450 @@ function aleat_bevent_binary(EQID1::Union{AbstractMatrix{T}, AbstractArray{T}},
                              θ) where T <: Real
     
     #hyperparameters
-    τ₀ = @view θ[1] #between event variance
+    τ₀² = @views θ[1] #between event variance
     
     #evaluate kernel for between event residuals
-    return group_binary(EQID1, EQID2, τ₀; δ=1e-6)
+    return group_binary(EQID1, EQID2, τ₀²; δ=1e-6)
 end
 
 # Individual Non-ergodic Kernels
 # ---   ---   ---   ---   ---
 """
-    Binary source kernel function
+    Binary source exponential kernel function
 """
-function source_binary(X₁ₗ::AbstractMatrix{T}, X₂ₗ::AbstractMatrix{T},
-                       θₗ::AbstractVector{T}) where T <: Real
+function source_exp_binary(X₁ₗ::AbstractMatrix{T}, X₂ₗ::AbstractMatrix{T},
+                           θₗ::AbstractVector{T}) where T <: Real
     
     #non-ergodic source
     return spherical_exp_binary(X₁ₗ,X₂ₗ,θₗ)
 end
 
 """
-    Binary site kernel function
+    Binary source Matern kernel function
 """
-function site_binary(X₁ₛ::AbstractMatrix{T}, X₂ₛ::AbstractMatrix{T},
-                     θₛ::AbstractVector{T}) where T <: Real
+function source_matern_binary(X₁ₗ::AbstractMatrix{T}, X₂ₗ::AbstractMatrix{T},
+                              θₗ::AbstractVector{T}) where T <: Real
+    
+    #non-ergodic source
+    return spherical_matern_binary(X₁ₗ,X₂ₗ,θₗ)
+end
+
+"""
+    Binary site exponential kernel function
+"""
+function site_exp_binary(X₁ₛ::AbstractMatrix{T}, X₂ₛ::AbstractMatrix{T},
+                         θₛ::AbstractVector{T}) where T <: Real
 
     #non-ergodic site
     return spherical_exp_binary(X₁ₛ,X₂ₛ,θₛ)
 end
 
 """
+    Binary site Matern kernel function
+"""
+function site_matern_binary(X₁ₛ::AbstractMatrix{T}, X₂ₛ::AbstractMatrix{T},
+                            θₛ::AbstractVector{T}) where T <: Real
+
+    #non-ergodic site
+    return spherical_matern_binary(X₁ₛ,X₂ₛ,θₛ)
+end
+
+#geometrical spreading exponential kernel
+n_integ_pt=5
+flag_normalize=true
+GSPathExpKernel = PathKernel(n_integ_pt, 
+                             KernelFunctions.ExponentialKernel( ;metric=KernelFunctions.Euclidean()), 
+                             flag_normalize)
+
+#geometrical spreading Matern kernel
+n_integ_pt=5
+flag_normalize=true
+t, s, w = gaussquad2d(n_integ_pt) #compute integration weights
+GSPathMaternKernel = PathKernel(n_integ_pt, 
+                                KernelFunctions.Matern32Kernel( ;metric=KernelFunctions.Euclidean()), 
+                                flag_normalize) 
+
+"""
     Binary path kernel function
 """
-function path_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                     θₚ::AbstractVector{T}; 
-                     n_integ_pt=5, flag_normalize=true) where T <: Real
-    
-    #hyperparameters
-    ωₚ² = @views θₚ[1]
-    λₚ  = @views θₚ[2]
+function path_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, θₚ::AbstractVector{T},
+                     PKernel) where T <: Real
 
-    #set up path kernel
-    # - number of integration points
-    # - underling covariance function
-    # - path normalization
-    # κₚ = ωₚ² * PathKernel(n_integ_pt, d -> exp(-d), 
-    #                       flag_normalize) ∘ ScaleTransform(λₚ)
-    # κₚ = PathKernel(n_integ_pt, d -> exp(-d), flag_normalize)
-    κₚ = ωₚ² * PathKernel(n_integ_pt, 
-                          ExponentialKernel(; metric=Euclidean()), 
-                          flag_normalize) ∘ ScaleTransform(λₚ)
-    #evaluate path kernel
-    Kₚ_buff = Zygote.Buffer(zeros(size(X₁)[1], size(X₂)[1]))
-    for j1 in 1:size(X₁)[1]
-        for j2 in 1:size(X₂)[1]
-            Kₚ_buff[j1,j2] = κₚ(X₁[j1,:],X₂[j2,:])
+    #hyperparameters
+    ωₚ² = θₚ[1]
+    λₚ  = θₚ[2]
+
+    #define path kernel
+    κₚ = ωₚ² * PKernel ∘ KernelFunctions.ScaleTransform(λₚ)
+
+    #evaluate kernel matrix
+    n1, n2 = size(X₁, 1), size(X₂, 1)
+    K_buffer = Zygote.Buffer(Matrix{T}(undef, n1, n2))
+
+    @inbounds for i in 1:n1
+        x = @view X₁[i, :]
+        @inbounds for j in 1:n2
+            y = @view X₂[j, :]
+            K_buffer[i, j] = κₚ(x, y)
         end
     end
-    return Zygote.copy(Kₚ_buff)
 
-    # return kernelmatrix(κₚ, RowVecs(X₁), RowVecs(X₂)) 
+    return copy(K_buffer)
+    # return KernelFunctions.kernelmatrix(κₚ, RowVecs(X₁), RowVecs(X₂))
+end
+
+"""
+    Binary path exponential kernel function
+"""
+function path_exp_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, θₚ::AbstractVector{T}) where T <: Real
+    
+    #evaluate path kernel
+    return path_binary(X₁, X₂, θₚ, GSPathExpKernel)
+end
+
+"""
+    Binary path Matern kernel function
+"""
+function path_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, θₚ::AbstractVector{T}) where T <: Real
+    
+    #evaluate path kernel
+    return path_binary(X₁, X₂, θₚ, GSPathMaternKernel)
 end
 
 # Composite Non-ergodic Kernels
 # ---   ---   ---   ---   ---
 """
-    Binary source & site kernel function
+    Binary source & site exponential kernel function
 """
-function sourcesite_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                           θ::AbstractVector{T}) where T <: Real
-    
-    #hyperparameters
-    θₗ = @view θ[1:2] #source parametes
-    θₛ = @view θ[3:4] #site parameters
-
-    #coordinates
-    X₁ₗ = @view X₁[:,1:2] #1st set of events
-    X₂ₗ = @view X₂[:,1:2] #2nd set of events
-    X₁ₛ = @view X₁[:,3:4] #1st set of sites
-    X₂ₛ = @view X₂[:,3:4] #2nd set of sites
-
-    #evaluate total kernel
-    Kₜ  = source_binary(X₁ₗ, X₂ₗ, θₗ)
-    Kₜ += site_binary(X₁ₛ,   X₂ₛ, θₛ)
-    
-    return Kₜ
-end
-
-"""
-    Binary path & site kernel function
-"""
-function pathsite_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                         θ::AbstractVector{T}) where T <: Real
-    
-    #hyperparameters
-    θₚ = @view θ[1:2] #path parametes
-    θₛ = @view θ[3:4] #site parameters
-
-    #coordinates
-    X₁ₛ = @view X₁[:,3:4] #1st set of sites
-    X₂ₛ = @view X₂[:,3:4] #2nd set of sites
-
-    #evaluate total kernel
-    Kₜ  = path_binary(X₁,  X₂,  θₚ)
-    Kₜ += site_binary(X₁ₛ, X₂ₛ, θₛ)
-    
-    return Kₜ
-end
-
-"""
-    Binary source, path & site kernel function
-"""
-function sourcepathsite_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+function sourcesite_exp_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
                                θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
-    θₗ = @view θ[1:2] #source parametes
-    θₚ = @view θ[3:4] #path parametes
-    θₛ = @view θ[5:6] #site parameters
+    θₗ = @views θ[1:2] #source parametes
+    θₛ = @views θ[3:4] #site parameters
 
-    #coordinates
-    X₁ₗ = @view X₁[:,1:2] #1st set of events
-    X₂ₗ = @view X₂[:,1:2] #2nd set of events
-    X₁ₛ = @view X₁[:,3:4] #1st set of sites
-    X₂ₛ = @view X₂[:,3:4] #2nd set of sites
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
 
     #evaluate total kernel
-    Kₜ  = source_binary(X₁ₗ, X₂ₗ, θₗ)
-    Kₜ += path_binary(X₁,    X₂,  θₚ)
-    Kₜ += site_binary(X₁ₛ,   X₂ₛ, θₛ)
+    Kₜ  = @views source_exp_binary(X₁[:,1:d],     X₂[:,1:d],       θₗ)
+    Kₜ += @views site_exp_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
     
+    return Kₜ
+end
+
+"""
+    Binary source & site Matern kernel function
+"""
+function sourcesite_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                  θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₗ = @views θ[1:2] #source parametes
+    θₛ = @views θ[3:4] #site parameters
+
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
+
+    #evaluate total kernel
+    Kₜ  = @views source_matern_binary(X₁[:,1:d],     X₂[:,1:d],       θₗ)
+    Kₜ += @views site_matern_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    
+    return Kₜ
+end
+
+"""
+    Binary path & site exponential kernel function
+"""
+function pathsite_exp_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                             θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₚ = @views θ[1:2] #path parametes
+    θₛ = @views θ[3:4] #site parameters
+
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
+
+    #evaluate total kernel
+    Kₜ  = path_binary(X₁,  X₂,  θₚ)
+    Kₜ += @views site_exp_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    
+    return Kₜ
+end
+
+"""
+    Binary path & site Matern kernel function
+"""
+function pathsite_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₚ = @views θ[1:2] #path parametes
+    θₛ = @views θ[3:4] #site parameters
+
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
+
+    #evaluate total kernel
+    Kₜ  = path_matern_binary(X₁,  X₂,  θₚ)
+    Kₜ += @views site_matern_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    
+    return Kₜ
+end
+
+"""
+    Binary source, path & site exponential kernel function
+"""
+function sourcepathsite_exp_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                   θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₗ = @views θ[1:2] #source parametes
+    θₚ = @views θ[3:4] #path parametes
+    θₛ = @views θ[5:6] #site parameters
+
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
+
+    #evaluate total kernel
+    Kₜ  = @views source_binary(X₁[:,1:d],     X₂[:,1:d],       θₗ)
+    Kₜ += @views path_exp_binary(X₁,              X₂,              θₚ)
+    Kₜ += @views site_exp_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    
+    return Kₜ
+end
+
+"""
+    Binary source, path & site Matern kernel function
+"""
+function sourcepathsite_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                      θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₗ = @views θ[1:2] #source parametes
+    θₚ = @views θ[3:4] #path parametes
+    θₛ = @views θ[5:6] #site parameters
+
+    #coordinate dimension size
+    d = div(size(X₁)[2], 2) 
+
+    #evaluate total kernel
+    Kₜ  = @views source_matern_binary(X₁[:,1:d],     X₂[:,1:d],       θₗ)
+    Kₜ += @views path_matern_binary(X₁,              X₂,              θₚ)
+    Kₜ += @views site_matern_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+   
     return Kₜ
 end
 
 # Non-ergodic Kernels with Aleat Variability
 # ---   ---   ---   ---   ---
 """
-    Binary source kernel function with between event aleatory variability
+    Binary source kernel exponential function with between event aleatory variability
 """
-function source_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                             θ::AbstractVector{T}) where T <: Real
+function source_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                 θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
-    θₗ = @view θ[1:2] #source parametes
-    θₐ = @view θ[3]   #aleatory parameters
-
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
-    #coordinates
-    X₁ₗ   = @view X₁[:,2:3] #1st set of events
-    X₂ₗ   = @view X₂[:,2:3] #2nd set of events
+    θₗ = @views θ[1:2] #source parametes
+    θₐ = @views θ[3]   #aleatory parameters
 
     #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += source_binary(X₁ₗ, X₂ₗ, θₗ)
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views source_exp_binary(X₁[:,2:end], X₂[:,2:end], θₗ)
     
     return Kₜ
 end
 
 """
-    Binary path kernel function with between event aleatory variability
+    Binary source kernel Matern function with between event aleatory variability
 """
-function path_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                           θ::AbstractVector{T}) where T <: Real
+function source_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                    θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₗ = @views θ[1:2] #source parametes
+    θₐ = @views θ[3]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views source_matern_binary(X₁[:,2:end], X₂[:,2:end], θₗ)
+    
+    return Kₜ
+end
+
+"""
+    Binary path exponential kernel function with between event aleatory variability
+"""
+function path_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                               θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
     θₚ = @view θ[1:2] #path parametes
     θₐ = @view θ[3]   #aleatory parameters
 
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
-
     #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += path_binary(X₁[:,2:5], X₂[:,2:5], θₚ)
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views path_exp_binary(X₁[:,2:end], X₂[:,2:end], θₚ)
     
     return Kₜ
 end
 
 """
-    Binary site kernel function with between event aleatory variability
+    Binary path Matern kernel function with between event aleatory variability
 """
-function site_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                           θ::AbstractVector{T}) where T <: Real
+function path_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                  θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₚ = @view θ[1:2] #path parametes
+    θₐ = @view θ[3]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views path_matern_binary(X₁[:,2:end], X₂[:,2:end], θₚ)
+    
+    return Kₜ
+end
+
+"""
+    Binary exponential site kernel function with between event aleatory variability
+"""
+function site_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                               θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
     θₛ = @view θ[1:2] #site parametes
     θₐ = @view θ[3]   #aleatory parameters
 
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
-    #coordinates
-    X₁ₛ   = @view X₁[:,2:3] #1st set of sites
-    X₂ₛ   = @view X₂[:,2:3] #2nd set of sites
+    #coordinate size
+    d = div(length(X₁), 2) 
 
     #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += site_binary(X₁ₛ, X₂ₛ, θₛ)
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views site_exp_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
     
     return Kₜ
 end
 
 """
-    Binary source and site kernel function with between event aleatory variability
+    Binary matern site kernel function with between event aleatory variability
 """
-function sourcesite_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                               θ::AbstractVector{T}) where T <: Real
+function site_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                  θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
-    θₙ = @view θ[1:4] #non-ergodic parametes
-    θₐ = @view θ[5]   #aleatory parameters
+    θₛ = @view θ[1:2] #site parametes
+    θₐ = @view θ[3]   #aleatory parameters
 
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
+    #coordinate size
+    d = div(length(X₁), 2) 
 
     #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += sourcesite_binary(X₁[:,2:5], X₂[:,2:5], θₙ)
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views site_matern_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
     
     return Kₜ
 end
 
 """
-    Binary path and site kernel function with between event aleatory variability
+    Binary source and site exponential kernel function with between event aleatory variability
 """
-function pathsite_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
-                               θ::AbstractVector{T}) where T <: Real
-    
-    #hyperparameters
-    θₙ = @view θ[1:4] #non-ergodic parametes
-    θₐ = @view θ[5]   #aleatory parameters
-
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
-
-    #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += pathsite_binary(X₁[:,2:5], X₂[:,2:5], θₙ)
-    
-    return Kₜ
-end
-
-"""
-    Binary source, path and site kernel function with between event aleatory variability
-"""
-function sourcepathsite_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+function sourcesite_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
                                      θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₙ = @view θ[1:4] #non-ergodic parametes
+    θₐ = @view θ[5]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views sourcesite_exp_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
+    
+    return Kₜ
+end
+
+"""
+    Binary source and site Matern kernel function with between event aleatory variability
+"""
+function sourcesite_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                        θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₙ = @view θ[1:4] #non-ergodic parametes
+    θₐ = @view θ[5]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views sourcesite_matern_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
+    
+    return Kₜ
+end
+
+"""
+    Binary path and site exponential kernel function with between event aleatory variability
+"""
+function pathsite_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                   θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₙ = @view θ[1:4] #non-ergodic parametes
+    θₐ = @view θ[5]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views pathsite_exp_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
+    
+    return Kₜ
+end
+
+"""
+    Binary path and site Matern kernel function with between event aleatory variability
+"""
+function pathsite_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                      θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₙ = @view θ[1:4] #non-ergodic parametes
+    θₐ = @view θ[5]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views pathsite_matern_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
+    
+    return Kₜ
+end
+
+"""
+    Binary source, path and site exponential kernel function with between event aleatory variability
+"""
+function sourcepathsite_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                         θ::AbstractVector{T}) where T <: Real
     
     #hyperparameters
     θₙ = @view θ[1:6] #non-ergodic parametes
     θₐ = @view θ[7]   #aleatory parameters
 
-    #event ids
-    EQID₁ = @view X₁[:,1] #1st set of earthquake ids
-    EQID₂ = @view X₂[:,1] #2nd set of earthquake ids
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views sourcepathsite_exp_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
+    
+    return Kₜ
+end
+
+"""
+    Binary source, path and site Matern kernel function with between event aleatory variability
+"""
+function sourcepathsite_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                            θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₙ = @view θ[1:6] #non-ergodic parametes
+    θₐ = @view θ[7]   #aleatory parameters
 
     #evaluate total kernel
-    Kₜ  = aleat_bevent_binary(EQID₁, EQID₂, θₐ)
-    Kₜ += sourcepathsite_binary(X₁[:,2:5], X₂[:,2:5], θₙ)
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views sourcepathsite_matern_binary(X₁[:,2:end], X₂[:,2:end], θₙ)
     
     return Kₜ
 end

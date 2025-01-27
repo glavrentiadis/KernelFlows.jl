@@ -42,7 +42,7 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T};
     (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
 
     cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, workbuf1, workbuf2)
-    @fastmath mul!(outbuf, workbuf1, M.h)
+    mul!(outbuf, workbuf1, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
     outbuf
@@ -71,6 +71,15 @@ function cross_covariance_matrix!(k::UnaryKernel, θ::AbstractVector{T},
 end
 
 
+"""Use the regular Matern32 covariance function for prediction"""
+function cross_covariance_matrix!(k::AnalyticKernel, θ::AbstractVector{T},
+                                  X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+                                  workbuf1::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
+
+    k_pred = UnaryKernel(Matern32, T[], size(X1)[2])
+    cross_covariance_matrix!(k_pred, θ, X1, X2, workbuf1, workbuf2)
+end
+
 function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
                                   X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
                                   workbuf::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
@@ -83,12 +92,12 @@ function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
     end
 end
 
-
-"""Use the regular Matern32 covariance function for prediction"""
-function cross_covariance_matrix!(k::AnalyticKernel, θ::AbstractVector{T},
+function cross_covariance_matrix!(k::BinaryVectorizedKernel, θ::AbstractVector{T},
                                   X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
-                                  workbuf1::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
+                                  workbuf::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
 
-    k_pred = UnaryKernel(Matern32, T[], size(X1)[2])
-    cross_covariance_matrix!(k_pred, θ, X1, X2, workbuf1, workbuf2)
+    (n,m) = size(workbuf)
+    
+    workbuf[:,:] = k.k(X1, X2, θ[1:end-1])
+
 end

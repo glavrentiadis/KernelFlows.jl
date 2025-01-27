@@ -67,7 +67,7 @@ function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     elseif s == :linear_mean_binary
         # get number of transformed X dims, plus nugget and weight
         θ₀_B = [ones(T, length(XP.spec.sparsedims) + 2) for XP in G.Xprojs]
-        for θ in θ₀list
+        for θ in θ₀_B
             θ[end] = exp(-7.0)
         end
     elseif s == :group_binary
@@ -82,40 +82,69 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:linear_binary               => linear_binary,
              :linear_mean_binary          => linear_mean_binary,
              :group_binary                => group_binary,
+             :spherical_matern_binary     => spherical_matern_binary, 
              :spherical_exp_binary        => spherical_exp_binary, 
-             :source_binary               => source_binary,
-             :path_binary                 => path_binary,
-             :site_binary                 => site_binary,
-             :sourcesite_binary           => sourcesite_binary,
-             :pathsite_binary             => pathsite_binary,
-             :sourcepathsite_binary       => sourcepathsite_binary,
-             :site_aleat_binary           => site_aleat_binary,
-             :sourcesite_aleat_binary     => sourcesite_aleat_binary,
-             :pathsite_aleat_binary       => pathsite_aleat_binary,
-             :sourcepathsite_aleat_binary => sourcepathsite_aleat_binary
+             #exponential seismic kernels
+             :source_exp_binary                 => source_exp_binary,
+             :path_exp_binary                   => path_exp_binary,
+             :site_exp_binary                   => site_exp_binary,
+             :sourcesite_exp_binary             => sourcesite_exp_binary,
+             :pathsite_exp_binary               => pathsite_exp_binary,
+             :sourcepathsite_exp_binary         => sourcepathsite_exp_binary,
+             :site_exp_aleat_binary             => site_exp_aleat_binary,
+             :sourcesite_exp_aleat_binary       => sourcesite_exp_aleat_binary,
+             :pathsite_exp_aleat_binary         => pathsite_exp_aleat_binary,
+             :sourcepathsite_exp_aleat_binary   => sourcepathsite_exp_aleat_binary,
+             #matern seismic kernels
+             :source_matern_binary               => source_matern_binary,
+             :path_matern_binary                 => path_matern_binary,
+             :site_matern_binary                 => site_matern_binary,
+             :sourcesite_matern_binary           => sourcesite_matern_binary,
+             :pathsite_matern_binary             => pathsite_matern_binary,
+             :sourcepathsite_matern_binary       => sourcepathsite_matern_binary,
+             :site_matern_aleat_binary           => site_matern_aleat_binary,
+             :source_matern_aleat_binary         => source_matern_aleat_binary,
+             :sourcesite_matern_aleat_binary     => sourcesite_matern_aleat_binary,
+             :pathsite_matern_aleat_binary       => pathsite_matern_aleat_binary,
+             :sourcepathsite_matern_aleat_binary => sourcepathsite_matern_aleat_binary,
              )
+    #intial nugget
+    # θ_nugget = T.(exp(.0))
+    θ_nugget = T.(exp(-7.0))
+    
+    #initial hyper-parameters
     if s  == :linear_binary
         θ₀_B = [exp.([0., -7.]) for XP in G.Xprojs]
     elseif s == :linear_mean_binary
         # get number of transformed X dims, plus nugget and weight
         θ₀_B = [ones(T, length(XP.spec.sparsedims) + 2) for XP in G.Xprojs]
-        for θ in θ₀list
-            θ[end] = exp(-7.0)
-        end
     elseif s == :group_binary
-        θ₀_B = T.(exp.([0., -7.]))
-    elseif s == :pathsite_binary || s == :sourcesite_binary
-        θ₀_B = T.(exp.([0., 0., 0., 0., -7.]))
-    elseif s == :sourcepathsite_binary
-        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., -7.]))
-    elseif s == :site_aleat_binary || s == :source_aleat_binary
+        θ₀_B = T.(exp.([0., 0.]))
+    elseif s == :pathsite_exp_binary || s == :sourcesite_exp_binary || s == :pathsite_matern_binary || s == :sourcesite_matern_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0.]))
+    elseif s == :sourcepathsite_exp_binary || s == :sourcepathsite_matern_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., 0.]))
+    elseif s == :site_exp_aleat_binary || s == :source_exp_aleat_binary || s == :site_matern_aleat_binary || s == :source_matern_aleat_binary
         θ₀_B = T.(exp.([0., 0., -7., -7.]))
-    elseif s == :pathsite_aleat_binary || s == :sourcesite_aleat_binary
+    elseif s == :pathsite_exp_aleat_binary || s == :sourcesite_exp_aleat_binary || s == :pathsite_matern_aleat_binary || s == :sourcesite_matern_aleat_binary
         θ₀_B = T.(exp.([0., 0., 0., 0., -7., -7.]))
-    elseif s == :sourcepathsite_aleat_binary
+    elseif s == :sourcepathsite_exp_aleat_binary || s == :sourcepathsite_matern_aleat_binary
         θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., -7., -7.]))
     else
         θ₀_B = T.(exp.([0., 0., -7.]))
+    end
+
+    #update nugget hyper-parameter
+    if s == :linear_mean_binary
+        for θ in θ₀_B
+            θ[end] = θ_nugget
+        end
+    elseif s in (:site_exp_aleat_binary, :source_exp_aleat_binary, :site_matern_aleat_binary, :source_matern_aleat_binary,
+                 :pathsite_exp_aleat_binary, :sourcesite_exp_aleat_binary, :pathsite_matern_aleat_binary, :sourcesite_matern_aleat_binary,
+                 :sourcepathsite_exp_aleat_binary, :sourcepathsite_matern_aleat_binary)
+        θ₀_B[end-1:end] .= θ_nugget
+    else
+        θ₀_B[end] = θ_nugget
     end
 
     return [BinaryVectorizedKernel(d[s], θ₀_B) for XP in G.Xprojs]
@@ -132,13 +161,23 @@ function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
     unary_kernels = [:spherical_sqexp, :spherical_exp,
                      :Matern32, :Matern52, :inverse_quadratic]
     binary_vkernels = [:linear_binary, :linear_mean_binary, 
-                       :group_binary, :spherical_exp_binary,
-                       :source_binary, :path_binary, :site_binary, 
-                       :sourcesite_binary, :pathsite_binary,
-                       :sourcepathsite_binary,
-                       :site_aleat_binary, :path_aleat_binary, :source_aleat_binary, 
-                       :sourcesite_aleat_binary, :pathsite_aleat_binary,
-                       :sourcepathsite_aleat_binary]
+                       :group_binary, 
+                       :spherical_exp_binary, :spherical_matern_binary,
+                       #exponential seismic kernels
+                       :source_exp_binary, :path_exp_binary, :site_exp_binary, 
+                       :sourcesite_exp_binary, :pathsite_exp_binary,
+                       :sourcepathsite_exp_binary,
+                       :site_exp_aleat_binary, :path_exp_aleat_binary, :source_exp_aleat_binary, 
+                       :sourcesite_exp_aleat_binary, :pathsite_exp_aleat_binary,
+                       :sourcepathsite_exp_aleat_binary,
+                       #matern seismic kernels
+                       :source_matern_binary, :path_matern_binary, :site_matern_binary,
+                       :sourcesite_matern_binary, :pathsite_matern_binary,
+                       :sourcepathsite_matern_binary,
+                       :site_matern_aleat_binary, :path_matern_aleat_binary, :source_matern_aleat_binary,
+                       :sourcesite_matern_aleat_binary, :pathsite_matern_aleat_binary,
+                       :sourcepathsite_matern_aleat_binary
+                       ]
     binary_kernels = [:linear_binary, :linear_mean_binary, 
                       :group_binary, :spherical_exp_binary]
     analytic_kernels = [:Matern32_analytic]

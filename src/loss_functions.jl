@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export ρ_LOI, ρ_KF, ρ_LOO, ρ_MLE, ρ_RMSE, ρ_abs, ρ_L2_with_unc
+export ρ_LOI, ρ_KF, ρ_LOO, ρ_MLE, ρ_RMSE, ρ_abs, ρ_L2_with_unc, ρ_MLE_cross 
 
 
 # using Zygote
@@ -357,8 +357,6 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AnalyticKernel,
 end
 
 
-
-
 function ρ_L2_with_unc(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel,
                        logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T <: Real
     Ω = kernel_matrix(k, logθ, X)
@@ -496,3 +494,56 @@ function ρ_RMSE_no_LOO(X::AbstractArray{T}, y::AbstractVector{T},
     ρtot / κ, αgrad ./ κ
 
 end
+
+
+function ρ_MLE_cross(X::AbstractArray{T}, y::AbstractVector{T}, k::AutodiffKernel,
+                     logθ::AbstractArray{T}; predictonlycenter::Bool = true) where T <: Real
+      
+    Ω = kernel_matrix(k, logθ, X)
+    Ω⁻¹ = inv(Ω)
+    n = length(y)
+    L2tot = zero(T)
+    vartot = zero(T)
+
+    varO = zero(T)
+    α1 = zero(T)
+    α2 = zero(T)
+    α3 = zero(T)
+
+    # Predict this many points closest to the center, or everything
+    s = sortperm(sum(Ω, dims = 2)[:], rev = true)
+    # Unlike with ρ_RMSE, one should not leave too many points out
+    # here. Otherwise the standard deviations go wrong.
+    M = predictonlycenter ? 95 * n ÷ 100 : n
+
+    κ = κ_default # O
+    s = collect(1:κ_default) # O
+
+    for i in s # O
+        m = [1:i-1; i+1:n]
+        A = @views Ω[m,i]' * (Ω⁻¹ - Ω⁻¹[:,i] * Ω⁻¹[:,i]' / Ω⁻¹[i,i])[m,m]
+        y_p = @views A * y[m]
+        δ = y_p - y[i]
+        σ = @views Ω[i,i] - A * Ω[m,i]
+        # println("δ: $δ, σ: $σ, z-score var: $(δ^2/σ)")
+
+        L2tot +=  δ^2
+
+        var = δ^2/σ
+        vartot += var
+        varO += log(σ) + var
+
+        α1 += Int(sqrt(var) < 1) # O
+        α2 += Int(sqrt(var) < 2) # O
+        α3 += Int(sqrt(var) < 3) # O
+    end
+    # println((vartot/(n-1) - 1.0)^2)
+
+    # The first term below is the average squared error, as in
+    # ρ_RMSE. The second one penalizes for any departure of the
+    # z-score sample variance from unity.
+    #L2tot / n + (vartot/(n-1) - one(T))^2
+
+    return varO / n + (α1 / n - 0.68)^2 + (α2 / n - 0.95)^2 + (α3 / n - 0.997)^2
+end
+

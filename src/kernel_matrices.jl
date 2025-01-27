@@ -111,7 +111,7 @@ end
 function kernel_matrix_fast!(k::BinaryKernel, θ::AbstractVector{T}, X::AbstractArray{T}, buf::AbstractMatrix{T}, outbuf::AbstractMatrix{T}; precision = true) where T <: Real
 
     n = size(X)[1]
-    K = zeros(n,n)
+    #K = zeros(n,n)
 
     @inbounds for i in 1:n
         @inbounds for j in 1:i
@@ -119,6 +119,31 @@ function kernel_matrix_fast!(k::BinaryKernel, θ::AbstractVector{T}, X::Abstract
             buf[j,i] = buf[i,j]
         end
     end
+
+    # Add nugget
+    δ = max(exp(-15), θ[end])
+    buf[diagind(buf)] .+= δ
+
+    if precision
+        L = cholesky!(buf)
+        ldiv!(outbuf, L, UniformScaling(1.)(n))
+    else
+        outbuf .= buf
+    end
+
+    outbuf
+end
+
+"""Compute kernel matrix K for binary vectorized kernels, or if precision == true,
+   its inverse. Not autodifferentiable, used for predictions"""
+function kernel_matrix_fast!(k::BinaryVectorizedKernel, θ::AbstractVector{T}, 
+                             X::AbstractArray{T}, buf::AbstractMatrix{T}, 
+                             outbuf::AbstractMatrix{T}; precision = true) where T <: Real
+
+    n = size(X)[1]
+    #K = zeros(n,n)
+    #compute kernel matrix
+    buf = @views k.k(X, X, θ[1:end-1])
 
     # Add nugget
     δ = max(exp(-15), θ[end])

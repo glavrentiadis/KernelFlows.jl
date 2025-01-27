@@ -155,7 +155,7 @@ function train!(Ms::Vector{GPModel{T}};
         computed[Threads.threadid()] += 1
         print("\rCompleted $(sum(computed))/$nM tasks...")
     end
-    println("done!\n")
+    println("done!")
 
     # No need to update anything if update_K is false, as the rest of
     # update_K is run above by train!() in any case.

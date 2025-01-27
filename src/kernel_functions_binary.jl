@@ -15,7 +15,12 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
-using KernelFunctions 
+import KernelFunctions
+using KernelFunctions: RowVecs
+# using KernelFunctions: WhiteKernel, ExponentialKernel, LinearKernel
+# using KernelFunctions: ScaleTransform, Euclidean
+# using KernelFunctions: RowVecs
+# using KernelFunctions: kernelmatrix
 
 """Linear kernel (with mean) for testing BinaryKernel
 correctness. This kernel also includes the mean, which is given as the
@@ -41,14 +46,14 @@ function linear_mean_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
     μ = @views log.(θ[2:end])
 
     #evaluate kernel matrix
-    return linear_binary(X1 .- μ, X2 .- μ, θ[2:end])
+    return  @views linear_binary(X1 .- μ, X2 .- μ, θ[2:end])
 end
 
 """Binary linear binary kernel, but without mean"""
 function linear_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
                        θ::AbstractVector{T})::T where T <: Real
     
-    return θ[1] * x1' * x2
+    return @views θ[1] * x1' * x2
 end
 
 function linear_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
@@ -58,10 +63,10 @@ function linear_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
     σ² = @views θ[1]
 
     #define kernel function 
-    k = σ² * LinearKernel()
+    κ = σ² * KernelFunctions.LinearKernel()
 
     #evaluate kernel matrix
-    return kernelmatrix(k, RowVecs(X1), RowVecs(X2)) 
+    return KernelFunctions.kernelmatrix(κ, RowVecs(X1), RowVecs(X2)) 
 end
 
 """Binary group kernel, with a correlation scale σ"""
@@ -80,10 +85,9 @@ function group_binary(X1::Union{AbstractVector{T}, AbstractMatrix{T}},
     σ² = @views θ[1]
 
     #define kernel function 
-    k = σ² * WhiteKernel()
-
+    κ = σ² * KernelFunctions.WhiteKernel()
     #evaluate kernel matrix
-    return kernelmatrix(k, RowVecs(X1), RowVecs(X2)) 
+    return KernelFunctions.kernelmatrix(κ, RowVecs(X1), RowVecs(X2)) 
 end
 
 """Binary exponential kernel, with a correlation scale σ and lenght λ parameters"""
@@ -107,10 +111,37 @@ function spherical_exp_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
     λ  = @views θ[2]
 
     #define kernel function 
-    k = σ² * ExponentialKernel(; metric=Euclidean()) ∘ ScaleTransform(λ)
+    κ = σ² * KernelFunctions.ExponentialKernel(; metric=KernelFunctions.Euclidean()) ∘ KernelFunctions.ScaleTransform(λ)
 
     #evaluate kernel matrix
-    return kernelmatrix(k, RowVecs(X1), RowVecs(X2))
+    return KernelFunctions.kernelmatrix(κ, RowVecs(X1), RowVecs(X2))
+end
+
+"""Binary Matern kernel, with a correlation scale σ and lenght λ parameters"""
+function spherical_matern_binary(x1::AbstractVector{T}, x2::AbstractVector{T},
+                              θ::AbstractVector{T})::T where T <: Real
+
+    #hyperparameters
+    σ² = @views θ[1]
+    λ  = @views θ[2]
+
+    #evaluate kernel matrix
+    h = sqrt(T(3.)) * norm(x1 .- x2) / λ
+    return σ² * (one(T) + h) * exp(-h)
+end
+
+function spherical_matern_binary(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
+    θ::AbstractVector{T})::AbstractMatrix{T} where T <: Real
+
+    #hyperparameters
+    σ² = @views θ[1]
+    λ  = @views θ[2]
+
+    #define kernel function 
+    κ = σ² * KernelFunctions.Matern32Kernel(; metric=KernelFunctions.Euclidean()) ∘ KernelFunctions.ScaleTransform(λ)
+
+    #evaluate kernel matrix
+    return KernelFunctions.kernelmatrix(κ, RowVecs(X1), RowVecs(X2))
 end
 
 #add kernels specific to ngmm

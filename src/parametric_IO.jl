@@ -110,17 +110,30 @@ function load_kernel(G::JLD2.Group)
                        "linear_binary"               => linear_binary,
                        "linear_mean_binary"          => linear_mean_binary,
                        "group_binary"                => group_binary,
+                       "spherical_matern_binary"     => spherical_matern_binary, 
                        "spherical_exp_binary"        => spherical_exp_binary, 
-                       "source_binary"               => source_binary,
-                       "path_binary"                 => path_binary,
-                       "site_binary"                 => site_binary,
-                       "sourcesite_binary"           => sourcesite_binary,
-                       "pathsite_binary"             => pathsite_binary,
-                       "sourcepathsite_binary"       => sourcepathsite_binary,
-                       "site_aleat_binary"           => site_aleat_binary,
-                       "sourcesite_aleat_binary"     => sourcesite_aleat_binary,
-                       "pathsite_aleat_binary"       => pathsite_aleat_binary,
-                       "sourcepathsite_aleat_binary" => sourcepathsite_aleat_binary)
+                       #exponential seismic kernels
+                       "source_exp_binary"                 => source_exp_binary,
+                       "path_exp_binary"                   => path_exp_binary,
+                       "site_exp_binary"                   => site_exp_binary,
+                       "sourcesite_exp_binary"             => sourcesite_exp_binary,
+                       "pathsite_exp_binary"               => pathsite_exp_binary,
+                       "sourcepathsite_exp_binary"         => sourcepathsite_exp_binary,
+                       "site_exp_aleat_binary"             => site_exp_aleat_binary,
+                       "sourcesite_exp_aleat_binary"       => sourcesite_exp_aleat_binary,
+                       "pathsite_exp_aleat_binary"         => pathsite_exp_aleat_binary,
+                       "sourcepathsite_exp_aleat_binary"   => sourcepathsite_exp_aleat_binary,
+                       #matern seismic kernels
+                       "source_matern_binary"               => source_matern_binary,
+                       "path_matern_binary"                 => path_matern_binary,
+                       "site_matern_binary"                 => site_matern_binary,
+                       "sourcesite_matern_binary"           => sourcesite_matern_binary,
+                       "pathsite_matern_binary"             => pathsite_matern_binary,
+                       "sourcepathsite_matern_binary"       => sourcepathsite_matern_binary,
+                       "site_matern_aleat_binary"           => site_matern_aleat_binary,
+                       "sourcesite_matern_aleat_binary"     => sourcesite_matern_aleat_binary,
+                       "pathsite_matern_aleat_binary"       => pathsite_matern_aleat_binary,
+                       "sourcepathsite_matern_aleat_binary" => sourcepathsite_matern_aleat_binary)
 
     # Default to UnaryKernel for loading legacy emulators
     kt = "kerneltype" in keys(G) ? G["kerneltype"] : "UnaryKernel"
