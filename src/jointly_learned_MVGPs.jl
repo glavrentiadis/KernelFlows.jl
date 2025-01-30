@@ -15,19 +15,26 @@ function predict_M(M::GPModel{T}, i::Int, logα, s::Vector{Int}, out::Union{Abst
     logθ = logα[end-3:end]
     λ = λ_new ./ M.λ # Factor to scale the inputs properly
     n = length(s)
+    κ = κ_default
 
     Ω = @views kernel_matrix(M.kernel, logθ, M.Z[s,:] .* λ')
 
     # Training data - we predict the first entry
-    L = @views cholesky(Ω[2:end,2:end])
-    h = @views L \ M.ζ[s[2:end]]
+    L = @views cholesky(Ω[κ+1:end,κ+1:end])
+    h = @views L \ M.ζ[s[κ+1:end]]
 
     # Debug:
     # KI = inv(Ω[2:end,2:end])
     # hh = KI * M.ζ[s[2:end]]
     # println(sum(abs.(h - hh)))
 
-    out[i] = @views dot(h, Ω[2:end,1])
+    t = Ω[1:κ,κ+1:end] * h
+
+    for j in 1:κ
+        out[j,i] = t[j]
+    end
+
+    out
 end
 
 
@@ -41,17 +48,18 @@ function predict_MVMs(MVMs::Vector{MVGPModel{T}}, s::Vector{Int}, logα_tot::Vec
     nMVMs = length(MVMs)
     tasks = collect(zip(all_Ms, 1:ntasks, logαs))
 
-    z = zeros(T, length(tasks))
-    z_buf = Zygote.Buffer(z) # vector of single-
+    κ = κ_default
 
-    # Threads.@threads
+    z = zeros(T, (κ, length(tasks)))
+    z_buf = Zygote.Buffer(z)
+
+    # Threads.@threads does not work with Zygote
     for t in tasks
         predict_M(t..., s, z_buf)
     end
 
     all_z = copy(z_buf)
-
-    preds = [recover_y(all_z[z_idxs[i]], MVMs[i].G) for i in 1:nMVMs]
+    preds = [recover_Y(all_z[:,z_idxs[i]], MVMs[i].G) for i in 1:nMVMs]
 end
 
 
@@ -115,8 +123,18 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
                          errorsigma::Function = one{T},
                          optalg::Symbol = :AMSGrad,
                          optargs::Dict{Symbol,H} = Dict{Symbol,Any}(),
-                         niter::Int = 500, n::Int = 64,
-                         update_K::Bool = true) where {T<:Real, H<:Any}
+                         mbalg::Symbol = :multicenter,
+                         mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
+                         n::Int = 0, # override :n in mbargs
+                         niter::Int = 0, # override :niter in mbargs
+                         ϵ::T = zero(T), # override :ϵ in mbargs
+                         update_K::Bool = true) where {T<:Real, H<:Any, H2<:Any}
+
+    # Override parameters if those were supplied, like in train!().
+    (n != 0) && (mbargs[:n] = n)
+    (niter != 0) && (mbargs[:niter] = niter)
+    (ϵ != 0.) && (optargs[:ϵ] = ϵ)
+
 
     Random.seed!(1)
     ndata = length(MVMs[1].Ms[1].ζ)
@@ -127,37 +145,59 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
 
     # Loss function, with regularization, and its gradient.
     function ξ(MVMs::Vector{MVGPModel{T}}, s::Vector{Int},
-               logα_tot::AbstractVector{T}, y_true_all::Vector{Vector{T}},
-               fy_true::Vector{T}, σ::Vector{T}) where T <: Real
-        y_preds_all = predict_MVMs(MVMs, s, logα_tot, logα_idxs, z_idxs)
+               logα_tot::AbstractVector{T}, Y_true_all::Vector{Matrix{T}},
+               fy_true::Matrix{T}, σ::Matrix{T}) where T <: Real
 
-        fy_pred = fwdfun_pred(y_true_all..., y_preds_all...)
-
-        # Debug:
-        # k = rand(1:285)
-        # fp1 = fy_pred[k]
-        # ft1 = fy_true[k]
-        # yt1 = y_true_all[3][k]
-        # yp1 = y_preds_all[3][k]
-        # yd1 = yt1 - yp1
-        # println("true / pred / diff: $yt1 $yp1 $yd1")
+        Y_preds_all = predict_MVMs(MVMs, s, logα_tot, logα_idxs, z_idxs)
 
         tot = zero(T)
-        yt = vcat(y_true_all...)
-        yp = vcat(y_preds_all...)
-        tot += T(1e-2) * sum((yt - yp).^2)
+        κ = κ_default
+        for i in 1:κ
+            y_preds_all_i = [YP[i,:] for YP in Y_preds_all]
+            y_true_all_i = [YT[i,:] for YT in Y_true_all]
 
-        tot += sum(((fy_pred - fy_true) ./ σ).^2) + reg * sum(exp.(logα_tot))
+            fy_pred_i = fwdfun_pred(y_true_all_i..., y_preds_all_i...)
+            fy_true_i = fy_true[i,:]
+
+            # Debug:
+            # k = rand(1:285)
+            # fp1 = fy_pred[k]
+            # ft1 = fy_true[k]
+            # yt1 = y_true_all[3][k]
+            # yp1 = y_preds_all[3][k]
+            # yd1 = yt1 - yp1
+            # println("true / pred / diff: $yt1 $yp1 $yd1")
+            # Zygote.@ignore display(fy_pred_i' - fy_true_i')
+
+            # Goodness of fit of total function f
+            tot += (sum(fy_pred_i[mm] - fy_true_i[mm]) ./ σ).^2
+
+            # Add regularization
+            # tot += reg * sum(exp.(logα_tot))
+
+            # Force individual prediction vectors to be accurate
+            # yt = vcat(y_true_all_i...)
+            # yp = vcat(y_preds_all_i...)
+            # tot += T(1e-2) * sum((yt - yp).^2)
+
+            # Debug
+            # Zygote.@ignore display((fy_pred_i[1:5]' - fy_true_i[1:5]') ./ σ[i,1:5]')
+            # Zygote.@ignore display(fy_pred_i[1:5]' - fy_true_i[1:5]')
+            # Zygote.@ignore display(fy_true_i[1:5]')
+        end
+
         return tot
     end
 
     ∇ξ(MVMs::Vector{MVGPModel{T}}, s::Vector{Int},
-       logα_tot::Vector{T}, y_true_all::Vector{Vector{T}}, fy_true::Vector{T}, σ::Vector{T}) =
+       logα_tot::Vector{T}, y_true_all::Vector{Matrix{T}}, fy_true::Matrix{T}, σ::Matrix{T}) =
            Zygote.gradient(logα_tot -> ξ(MVMs, s, logα_tot, y_true_all, fy_true, σ), logα_tot)
 
-    # 2. get minibatches
-    all_s = get_random_partitions(ndata, n, niter)
-    all_s = collect(collect.(eachrow(all_s)))
+    # 2. get minibatches, use the first univariate model of the first GP for this
+    M11 = MVMs[1].Ms[1]
+    nλ_M11 = length(M11.λ)
+    B = get_minibatcher(mbalg, M11.Z; mbargs)
+    κ = κ_default
 
     # 3. get optimizer for the combined state
     logα_tot = get_logα(MVMs)
@@ -169,34 +209,24 @@ function train_MVMVector(MVMs::Vector{MVGPModel{T}};
 
     # For each iteration:
     for i in 1:niter
-        ((i+1) % 25 == 0) && (print("$i "))
-        s = all_s[i]
-
-        # The same minibatch is needed for each univariate model M,
-        # but they all have different parameters, so choosing the
-        # "correct" one is not possible. We use the first GPModel of
-        # the first MVGPModel to select the minibatch. This could also
-        # be randomized - however, the weights of some models may be
-        # small, so sampling weights should probably follow
-        # MVM.G.Yproj.values - but then again, the objective function
-        # is a nonlinear function of multiple MVGPModels, so that
-        # would not be strictly correct either.
-        M11 = MVMs[1].Ms[1]
-        Zi = M11.Z[s,:] .* (default_λ(M11) ./ M11.λ)'
-        dists = pairwise(SqEuclidean(), Zi; dims = 1)
-        s2 = sortperm(sum(exp.(-dists), dims = 1)[:])
-        s = s[s2[end:-1:1]]
+        if (i+1) % 100 == 0
+            (print("\rIteration $(i+1)"))
+        end
+        s = minibatch(B, exp.(O.x[1:nλ_M11])) # Optimization is in log space
 
         # True labels for first element in minibatch
-        y_true_all = recover_training_labels(MVMs, s[1])
+        y_true_all_s = recover_training_labels(MVMs, s[1:κ])
         # True forward-modeled values
-        fy_true = fwdfun_true(y_true_all...)
+        fy_true_s = fwdfun_true(y_true_all_s...)
         # Error standard deviation
-        σ = errorsigma(y_true_all...)
+        σ_s = errorsigma(y_true_all_s...)
 
-        loss = ξ(MVMs, s, logα_tot, y_true_all, fy_true, σ)
-        ∇logα_tot = ∇ξ(MVMs, s, logα_tot, y_true_all, fy_true, σ)[1]
+        loss = ξ(MVMs, s, logα_tot, y_true_all_s, fy_true_s, σ_s)
+        ∇logα_tot = ∇ξ(MVMs, s, logα_tot, y_true_all_s, fy_true_s, σ_s)[1]
         iterate!(O, ∇logα_tot)
+
+        # println("grad:")
+        # display(∇logα_tot')
 
         # Record parameter path for later
         for j in 1:nMs
