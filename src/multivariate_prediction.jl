@@ -15,32 +15,68 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
+
+function PredictionBuffer(k::Union{AnalyticKernel{T}, UnaryKernel{T}},
+                          ntr::Int, nte::Int, ndim::Int) where T <: Real
+
+    StandardPredictionBuffer(zeros(T, (nte, ntr)), zeros(T, (nte, ntr)),
+                             zeros(T, (ntr, ndim)), zeros(T, (nte, ndim)),
+                             zeros(T, ntr), zeros(T, nte), nte)
+end
+
+
+function PredictionBuffer(k::Kernel, ntr::Int, nte::Int, ndim::Int)
+    FallbackPredictionBuffer(zeros(T, nte, ntr))
+end
+
+
 function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                  reduce_inputs::Bool = true,
                  apply_λ::Bool = true,
                  recover_outputs::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 workbufs1::Union{Vector{Matrix{T}}, Nothing} = nothing,
-                 workbufs2::Union{Vector{Matrix{T}}, Nothing} = nothing,
                  Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
 
-    nte = size(X)[1]
+    (nte, nXdims) = size(X)
     nzycols = length(MVM.Ms)
+    nzxcols = length(MVM.G.Xprojs[1].values)
     ZY_pred = zeros(T, (nte, nzycols))
 
     nt = Threads.nthreads()
-    wbsize = (size(X)[1], length(MVM.Ms[1].h))
-    workbufs1 = workbufs1 == nothing ? [zeros(T, wbsize) for _ in 1:nt] : workbufs1
-    workbufs2 = workbufs2 == nothing ? [zeros(T, wbsize) for _ in 1:nt] : workbufs2
+    ntr = length(MVM.Ms[1].h)
 
-    Threads.@threads :static for i ∈ Mlist
+    maxalloc = 2^25 # 64 MiB seems to give best performance on 9900X
+    chunksize = maxalloc ÷ 2 ÷ sizeof(T) ÷ ntr ÷ nt
+    chunksize = min(chunksize, nte)
+
+    nchunks = nte ÷ chunksize + 1
+
+    kernel = MVM.Ms[1].kernel
+
+    println("chunk size for prediction: $chunksize")
+
+    ck = collect(0:chunksize:nchunks*chunksize)
+    ck[end] = nte
+    batches = [c1+1:c2 for (c1,c2) in zip(ck[1:end-1], ck[2:end])]
+
+    # batches = ranges(1, nte, nchunks) # indexes for each batch predictions
+
+    # ranges() gives batch sizes which are not exactly of size chunksize
+    chunksize = maximum(length.(batches))
+
+    bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols) for _ in 1:nt]
+    tasks = collect(Iterators.product(Mlist, batches))[:]
+
+    Threads.@threads :static for (i,batch_I) in tasks
         tid = Threads.threadid()
-        Z = reduce_inputs ? reduce_X(X, MVM.G, i) : X
+        Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], MVM.G, i)) : (@views X[batch_I, :])
+
+        bs = length(batch_I) # batch size
+        pb = bs == bufs[tid].nte ? bufs[tid] : PredictionBuffer(kernel, ntr, bs, nzxcols)
 
         # Do the prediction in-place directly to outbuf
-        predict(MVM.Ms[i], Z; apply_λ, apply_zyinvtransf,
-                workbuf1 = workbufs1[tid], workbuf2 = workbufs2[tid],
-                outbuf = @view ZY_pred[:,i])
+        @views predict(MVM.Ms[i], Z, pb; apply_λ, apply_zyinvtransf,
+                       outbuf = ZY_pred[batch_I,i])
     end
 
     return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred

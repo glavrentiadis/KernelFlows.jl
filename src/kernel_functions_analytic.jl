@@ -20,9 +20,8 @@
 
 function Matern32!(D::AbstractMatrix{T}, a::T, b::T, buf::AbstractMatrix{T}) where T <: Real
     D .*= -sqrt(T(3.)) / b
-    buf .= D
+    buf .= exp.(D)
     # IVM.exp!(buf)  # 4x faster on Intel CPUs
-    buf .= exp.(buf) # slower but works on M-series Macs
     D .-= one(T)
     D .*= -a
     D .*= buf
