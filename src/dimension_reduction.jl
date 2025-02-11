@@ -158,6 +158,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     nYCCA = min(nYCCA, nY_full)
     nYPCA = min(nYPCA, nY_full - nYCCA)
     nYCCA == 0 && (reg_CCA = zero(T))
+    nXCCA = min(nXCCA, size(X)[2])
 
     # If there are no CCA or PCA output vectors, we don't do any
     # transforms but model the data directly in the original
