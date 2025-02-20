@@ -454,9 +454,9 @@ function ρ_RMSE_no_LOO(X::AbstractArray{T}, y::AbstractVector{T},
     Ktr = @views K[κ+1:end, κ+1:end]
     (Ktr, info) = LAPACK.potrf!('U', Ktr)
 
-    gy = zeros(ntr)
+    gy = zeros(T, ntr)
     gy .= y[κ+1:n]
-    gh = zeros(ntr, κ)
+    gh = zeros(T, (ntr, κ))
     h = K[κ+1:n, 1:κ]
     gh .= h
 
@@ -475,9 +475,9 @@ function ρ_RMSE_no_LOO(X::AbstractArray{T}, y::AbstractVector{T},
 
     ρtot = dot(r,r)
 
-    buf1_κ = zeros(κ)
-    buf2_κ = zeros(κ)
-    buf_ntr = zeros(ntr)
+    buf1_κ = zeros(T, κ)
+    buf2_κ = zeros(T, κ)
+    buf_ntr = zeros(T, ntr)
 
     for i in 1:nα
         hgrad = @views Kgrads[i][κ+1:end, 1:κ]
