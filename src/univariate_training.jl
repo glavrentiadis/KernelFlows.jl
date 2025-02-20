@@ -213,6 +213,9 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
         local_Xbuf .= @views X[s,:]
         ρval, ξgrad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
 
+        ρval += T(1e-3) * sum(exp.(O.x)) # reg
+        ξgrad += T(1e-3) * exp.(O.x)
+
         # Debug the no-LOO loss by train!()'ing with ρ_RMSE and uncommenting:
         # ξg_LOO = ξgrad[:] # Make a copy, as loss function overwrites this.
         # rv, ξg_no_LOO = ρ_RMSE_no_LOO(local_Xbuf, ζ[s], k, O.x,
