@@ -67,11 +67,11 @@ function split_data(Zs::Vector{Matrix{T}};
 end
 
 
-function randomsplit(nfull::Int, npart::Int; seed::UInt = rand(UInt))
+function randomsplit(nfull::Int, nte::Int; ntr::Int = nfull - nte, seed::UInt = rand(UInt))
     Random.seed!(seed)
     s = randperm(nfull)
-    s_te = s[1:npart]
-    s_tr = s[npart+1:end]
+    s_tr = s[1:ntr]
+    s_te = s[ntr+1:ntr + nte]
     return s_tr, s_te
 end
 
