@@ -45,7 +45,9 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     nt = Threads.nthreads()
     ntr = length(MVM.Ms[1].h)
 
-    maxalloc = 2^25 # 64 MiB seems to give best performance on 9900X
+    # Predictive performance varies a lot according to maxalloc both
+    # from processor to another and from application to another.
+    maxalloc = 2^28
     chunksize = maxalloc ÷ 2 ÷ sizeof(T) ÷ ntr ÷ nt
     chunksize = min(chunksize, nte)
 
