@@ -27,7 +27,7 @@ abstract type AbstractMinibatch end
 
 
 const n_default = 64
-const κ_default = 5
+const κ_default = 3
 
 
 mutable struct RandomPartitions <: AbstractMinibatch
