@@ -46,7 +46,7 @@ end
 
 
 function iterate!(O::SGD, g::AbstractVector{T}) where T <: Real
-    α = O.fixed ? sqrt(sum(g.^2) + 1e-9) : 1.0
+    α = O.fixed ? sqrt(sum(g.^2) + T(1e-9)) : one(T)
     O.x .-= O.ϵ / α * g
 end
 
