@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export GPModel, update_GPModel!
+export GPModel, update_GPModel!, update_parameters!
 
 
 """Univariate GP model struct. This struct is sufficient for
@@ -69,6 +69,12 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
     return GPModel(ζ, h, Z, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[])
 end
 
+"""Updates parameters and M.Z for a GPModel M. The vector newpars
+contains the new M.λ and M.θ concatenated into one vector."""
+function update_parameters!(M::GPModel{T}, newpars::Vector{<:Real}) where T <: Real
+    update_GPModel!(M; newλ = T.(newpars[1:end-4]), newθ = T.(newpars[end-3:end]), update_K = false)
+end
+
 
 default_λ(M::GPModel) = length(M.λ_training) == 0 ? M.λ : M.λ_training[end]
 default_θ(M::GPModel) = length(M.θ_training) == 0 ? M.θ : M.θ_training[end]
@@ -78,10 +84,9 @@ default_θ(M::GPModel) = length(M.θ_training) == 0 ? M.θ : M.θ_training[end]
    not given, M.h is recomputed, unless update_K == false (it is
    not computed when GPModel is initialized)."""
 function update_GPModel!(M::GPModel{T};
-                         newλ::Vector{T} = default_λ(M),
-                         newθ::Vector{T} = default_θ(M),
-                         buf1::Union{Nothing, Matrix{T2}} = nothing,
-                         buf2::Union{Nothing, Matrix{T2}} = nothing,
+                         newλ::Vector{<:Real} = default_λ(M),
+                         newθ::Vector{<:Real} = default_θ(M),
+                         buf::Union{Nothing, Matrix{T2}} = nothing,
                          update_K::Bool = true) where {T<:Real,T2<:Real}
 
     # Update M.Z, M.λ, and M.θ, if requested
@@ -100,19 +105,32 @@ function update_GPModel!(M::GPModel{T};
     if update_K
         # Allocate buffers
         ntr = length(M.ζ)
-        H = Float64
-        (buf1 == nothing) && (buf1 = zeros(H, (ntr, ntr)))
-        (buf2 == nothing) && (buf2 = zeros(H, (ntr, ntr)))
+        H = Float32
+        (buf == nothing) && (buf = zeros(H, (ntr, ntr)))
 
         # If buf1 of type T2 != T was given, we compute Cholesky with
         # that type. Using e.g. Float32 instead of Float64 is faster,
         # but less stable.
-        H = eltype(buf1)
+        H = eltype(buf)
         h = H.(M.ζ) # need type converion for potrs!
+        diagbuf = zeros(H, ntr)
 
-        kernel_matrix_fast!(M.kernel, H.(M.θ), H.(M.Z), buf1, buf2; precision = false)
-        LAPACK.potrf!('U', buf2) # cholesky
-        LAPACK.potrs!('U', buf2, h) # solve h <- inv(K) * h
+        kernel_matrix_fast!(M.kernel, H.(M.θ), H.(M.Z), buf; precision = false)
+        diagbuf .= @views buf[1:ntr+1:ntr^2]
+        (buf, info) = LAPACK.potrf!('U', buf) # cholesky
+
+        a = one(H)
+        b = H(1e-4)
+        while info != 0
+            nug = one(H) + b
+            print("\npotrf! failed, INFO = $(info), recomputing with multiplicative nugget of $nug.")
+            LinearAlgebra.copytri!(buf, 'L')
+            buf[1:ntr+1:ntr^2] .= diagbuf .* nug
+            b *= H(2)
+            (buf, info) = LAPACK.potrf!('U', buf) # cholesky
+        end
+
+        LAPACK.potrs!('U', buf, h) # solve h <- inv(K) * h
         M.h .= h # copy K⁻¹ζ where it belongs
     end
 
@@ -121,14 +139,15 @@ end
 
 
 """Updates a vector of GPModels by calling update_GPModel!() for each
-of them. The parameters are supplied in matrices. By default, the
-inverse covariance is recomputed using whatever parameter values are
-in the variables M.λ and M.θ"""
+of them. The parameters cannot be supplied in this function, see
+update_parameters() instead. By default, the inverse covariance is
+recomputed using whatever parameter values are in the variables M.λ
+and M.θ"""
 function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T <: Real
 
     nM = length(Ms)
     ndata = length(Ms[1].ζ)
-    parallel = ndata < 10001
+    parallel = ndata < 20001
 
     txt1 = parallel ? "in parallel" : "serially"
     txt2 = update_K ? "Also updates" : "Skip updating"
@@ -140,20 +159,19 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
     print("\rCompleted 0/$nM tasks...")
     if parallel
         nt = Threads.nthreads()
-        buf1s = u(ndata, nt)
-        buf2s = u(ndata, nt)
+        bufs = u(ndata, nt)
         computed = zeros(Int, nt)
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
             tid = Threads.threadid()
-            update_GPModel!(M; buf1 = buf1s[tid], buf2 = buf2s[tid], update_K)
+            update_GPModel!(M; buf = bufs[tid], update_K)
             computed[Threads.threadid()] += 1
             print("\rCompleted $(sum(computed))/$nM tasks...")
         end
     else
-        buf1, buf2 = u(ndata, 2)
+        buf = zeros(T, (ndata, ndata))
         for (i,M) ∈ collect(enumerate(Ms))
-            update_GPModel!(M; update_K, buf1, buf2)
+            update_GPModel!(M; update_K, buf)
             print("\rCompleted $i/$nM tasks...")
     end
     end
