@@ -37,10 +37,10 @@ function pw_and_linear!(A::AbstractMatrix{T}, out1::AbstractMatrix{T}, out2::Abs
     a = sum(A, dims = 2)
     out1 .+= a
     out1 .+= a'
-    # display(out1)
     # precision error may lead to tiny small values on diagonal
     out1[diagind(out1)] .= 0
-    out1 .+= 1e-14 # we may get tiny negative values somewhere
+
+    out1[out1 .< zero(T)] .= zero(T)
     out1 .= sqrt.(out1) # Euclidean distance
 end
 
