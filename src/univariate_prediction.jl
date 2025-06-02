@@ -101,11 +101,7 @@ end
 
 function cross_covariance_matrix!(k::BinaryKernel, θ::AbstractVector{T},
                                   X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
-<<<<<<< HEAD
-                                  workbuf::Matrix{T}, workbuf2::Matrix{T}) where T <: Real
-=======
                                   pb::FallbackPredictionBuffer{T}) where T <: Real
->>>>>>> 5df879b (Optimize memory handling and speed for prediction)
 
     (n,m) = size(pb.M_cross)
     @inbounds for i in 1:n

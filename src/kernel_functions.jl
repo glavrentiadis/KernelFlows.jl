@@ -95,7 +95,7 @@ end
 
 function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:Matern32_analytic => Matern32_αgrad!)
-    θ₀_A = T.(exp.([0., 0., -4., -7.]))
+    θ₀_A = T.(exp.([0., 0., 0., -7.]))
     return [AnalyticKernel(d[s], θ₀_A) for XP in G.Xprojs]
 end
 
