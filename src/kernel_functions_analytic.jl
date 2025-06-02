@@ -93,7 +93,7 @@ function Matern32_αgrad!(X::AbstractMatrix{T}, logα::AbstractVector{T},
 
         # Get squared distances between vbuf elements in Mbuf2
         BLAS.syrk!('U', 'N', T(-2), vbuf2, zero(T), Mbuf2)
-        @views v2 .= -.5*Mbuf2[diagind(Mbuf2)] # squared elements
+        @views v2 .= -T(.5)*Mbuf2[diagind(Mbuf2)] # squared elements
         Mbuf2 .= Mbuf2 .+ v2 .+ v2' # Now we have the squared distances
         Mbuf2 .*= Mbuf1
 
@@ -104,15 +104,16 @@ function Matern32_αgrad!(X::AbstractMatrix{T}, logα::AbstractVector{T},
         # LinearAlgebra.copytri!(Kgrads[i], 'U')
     end
 
-    # RBF weight derivative. Note that multiplication of the Matern by
+    # Matern weight derivative. Note that multiplication of the Matern by
     # the weight θ[1] is already included in Dbuf.
     Kgrads[nλ+1] .= Dbuf
 
     # Derivative wrt RBF common scaling parameter ("b" in Matern32)
-    Mbuf3 .*= Mbuf3 # squared pairwise distances
-    Mbuf3 .*= Mbuf1 # after Matern32! Mbuf1 has exp(-sqrt(3)d/θ[2])
-    Mbuf3 .*= -one(T)
-    Kgrads[nλ+2] .= Mbuf3 # Copy derivative where it belongs
+    # Mbuf3 .*= Mbuf3 # squared pairwise distances
+    # Mbuf3 .*= Mbuf1 # after Matern32! Mbuf1 has exp(-sqrt(3)d/θ[2])
+    # Mbuf3 .*= -one(T)
+    # Kgrads[nλ+2] .= Mbuf3 # Copy derivative where it belongs
+    Kgrads[nλ+2] .= T(-1) .* Mbuf3 .* Mbuf3 .* Mbuf1
 
     # Derivative wrt linear kernel weight
     # Kgrads[nλ+3] .= α[end-1] * Xbuf * Xbuf'
