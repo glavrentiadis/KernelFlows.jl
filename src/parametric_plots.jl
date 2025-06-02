@@ -54,21 +54,23 @@ function quantileplot!(ax::Makie.Axis, Y_te::AbstractMatrix{T}, Y_te_pred::Abstr
     Makie.xlims!(ax, extrema(x))
 end
 
-function plot_training(MVM::MVGPModel; p = nothing, title = "")
+function plot_training(MVM::MVGPModel; p = nothing, title = "", nY::Int = length(MVM.Ms))
 
-    nY = length(MVM.Ms)
+    cbg = :oldlace # palette(:tab20b)[11]
     nYCCA = MVM.G.Yproj.spec.nCCA
     nYPCA = MVM.G.Yproj.spec.nPCA
+    nYdummy = MVM.G.Yproj.spec.ndummy
 
     r = length(MVM.Ms[1].ρ_values)
     m = r > 1000 ? splitrange(1, r, 1000) : 1:r
 
     xlabels1 = ["$(round(MVM.G.Yproj.values[i], sigdigits=2))" for i in 1:nYCCA]
     xlabels2 = ["$(round(MVM.G.Yproj.values[i+nYCCA], sigdigits=2))" for i in 1:nYPCA]
-    xl = [xlabels1..., xlabels2...]
+    xlabels3 = ["$(round(MVM.G.Yproj.values[i+nYCCA+nYPCA], sigdigits=2))" for i in 1:nYdummy]
+    xl = [xlabels1..., xlabels2..., xlabels3...]
 
     p == nothing && (p = Plots.plot(layout = grid(3, nY, heights = [0.4, 0.4, 0.2]),
-                                    size = (2400, 800), xrotation = 70, link = :both))
+                                    size = (1600, 800), xrotation = 70, link = :both, dpi = 300))
 
     for i in 1:3nY
         # no y tick labels for columns >1
@@ -82,22 +84,39 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "")
         M = MVM.Ms[i]
         λs = log.(hcat(M.λ_training...)[:,m])
         nXCCA = MVM.G.Xprojs[i].spec.nCCA # number of X CCA vectors for this Y dim
-        Plots.plot!(p[i], λs[1:nXCCA,:]', legend = false, xformatter = _ -> "")
-        Plots.plot!(p[i], λs[nXCCA+1:end,:]', legend = false, color = "gray", alpha = .2)
-        Plots.plot!(p[i+nY], log.(hcat(M.θ_training...)[:,m]'),
+        Plots.plot!(p[i], m, λs[1:nXCCA,:]', legend = false, xformatter = _ -> "")
+        Plots.plot!(p[i], m, λs[nXCCA+1:end,:]', legend = false, color = "gray", alpha = .2)
+        Plots.plot!(p[i+nY], m, log.(hcat(M.θ_training...)[:,m]'),
                     legend = false, xformatter = _ -> "", top_margin = 0mm)
 
         xlab = length(xl) > 0 ? xl[i] : ""
-        Plots.plot!(p[i+2nY], log.(M.ρ_values[m]), legend = false,
-                        xlabel = xlab, top_margin = 0mm)
+        Plots.plot!(p[i+2nY], m, log.(M.ρ_values[m]), legend = false,
+                        # xlabel = xlab, top_margin = 0mm)
+                        xlabel = "Iteration", top_margin = 0mm)
+    end
+
+    for i in 1:nYCCA
+        Plots.plot!(p[i], bgcolor_inside = cbg, title = "CCA $i\n($(xl[i]))")
+        Plots.plot!(p[i+nY], bgcolor_inside = cbg)
+        Plots.plot!(p[i+2nY], bgcolor_inside = cbg)
+    end
+
+    for i in (nYCCA+1):(nYCCA+nYPCA)
+        Plots.plot!(p[i], title = "PCA $(i-nYCCA)\n($(xl[i]))")
+    end
+
+    for i in (nYCCA+nYPCA+1):nY
+        Plots.plot!(p[i], title = "dummy $(i-nYCCA-nYPCA)\n($(xl[i]))")
     end
 
     niter_tot = length(MVM.Ms[1].ρ_values)
-    Plots.plot!(p[1], ylabel = "log(λ)", right_margin = -4mm)
-    Plots.plot!(p[nY+1], ylabel = "log(θ)", right_margin = -4mm)
-    Plots.plot!(p[2nY+1], ylabel = "log(ρ)", bottom_margin = 12mm, right_margin = -4mm)
+    Plots.plot!(p[1], ylabel = "log(λ)\n(scaling factors)", right_margin = -4mm)
+    Plots.plot!(p[nY+1], ylabel = "log(θ)\n(other parameters)", right_margin = -4mm)
+    Plots.plot!(p[2nY+1], ylabel = "log(ρ)\n(loss function values)", bottom_margin = 12mm, right_margin = -4mm)
     # Plots.plot!(p, xticks = [1, niter_tot÷2, niter_tot] , xrotation = 70)
-    Plots.plot!(p[1], left_margin = 12mm, top_margin = 6mm)
+    Plots.plot!(p[1], left_margin = 13mm, top_margin = 6mm)
+
+    Plots.plot!(p, xlims = (m[1], m[end]))
     p
 end
 
