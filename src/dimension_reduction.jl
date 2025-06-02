@@ -137,7 +137,8 @@ multivariate GP in terms of a number of univariate GPs. Examples:
 function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    Xtransf_deg::Int = 0, Xtransf_ϵ::Real = 1e-2,
                    Ydims::AbstractVector{Int} = 1:size(Y)[2],
-                   nYCCA::Int = 0, nYPCA::Int = 0, nXCCA::Int = 1,
+                   nYCCA::Int = 0, nYPCA::Int = 0,
+                   nXPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
                    reg_CCA::Real = 1e-2, reg_CCA_X::Real = reg_CCA,
                    maxdata::Int = 3000, scale_Y::Bool = false) where T <: Real
@@ -153,12 +154,23 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     (dummyXdims == false) && (dummyXdims = 1:0)
     (dummyXdims == true) && (dummyXdims = 1:size(X)[2])
 
+    # If no input X were given, we force dummyXdims to true, in order
+    # to have _any_ dimensions to predict with. Otherwise we are not
+    # learning an λs.
+    if (nXPCA + nXCCA + length(dummyXdims) == 0)
+        nXdummy = size(X)[2]
+        println("Setting dummyXdims to 1:$nXdummy")
+        dummyXdims =1:nXdummy
+    end
+
     # Do not use more CCA / PCA dims than there are dimensions
     nY_full = length(Ydims) # only these can be non-constant
     nYCCA = min(nYCCA, nY_full)
     nYPCA = min(nYPCA, nY_full - nYCCA)
     nYCCA == 0 && (reg_CCA = zero(T))
+
     nXCCA = min(nXCCA, size(X)[2])
+    nXPCA = min(nXPCA, size(X)[2] - nXCCA)
 
     # If there are no CCA or PCA output vectors, we don't do any
     # transforms but model the data directly in the original
@@ -166,7 +178,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Y-dimensions will be used.
     nYdummy = nYCCA + nYPCA == 0 ? nY_full : 0
 
-    nX = nXCCA + length(dummyXdims) # total number of transformed inputs
+    nX = nXPCA + nXCCA + length(dummyXdims) # total number of transformed inputs
     nY = nYCCA + nYPCA + nYdummy # total number of transformed outputs
 
     # Shrink X and Y to make covariance computations faster
@@ -211,8 +223,8 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Allocate Projection objects for inputs
     Xprojs = Vector{Projection{T}}()
     for i in 1:nY
-        sparseXdims = collect(1:nXCCA + length(dummyXdims))
-        XSpec = ProjectionSpec(nXCCA, 0, length(dummyXdims), dummyXdims, sparseXdims)
+        sparseXdims = collect(1:(nXCCA + nXPCA + length(dummyXdims)))
+        XSpec = ProjectionSpec(nXCCA, nXPCA, length(dummyXdims), dummyXdims, sparseXdims)
         push!(Xprojs, Projection(zeros(T, (size(X)[2], nX)), zeros(T, nX), XSpec))
     end
 
@@ -244,18 +256,31 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Get dummy output vectors and values
     if nYdummy > 0
         Yproj.values .= 1.0 # Data was standardized earlier
-        Yproj.vectors .= diagm(ones(T, nYdummy))
+        Yproj.vectors .= 0.0
+        for (i,yd) in enumerate(Ydims)
+            Yproj.vectors[yd,i] = 1.0
+        end
     end
 
     # Fill the rest of CCA X-dimensions and dummy X dimensions for all Y-vectors
-    for i in 1:nY
+    Threads.@threads for i in 1:nY
         yproj_i = @views Y_unreduced * Yproj.vectors[:,i]
-        get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA_X, reg_CCA_X,
-                           X_basis = Xprojs[i].vectors, X_values = Xprojs[i].values)
+        if nXCCA > 0
+            get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA_X, reg_CCA_X,
+                               X_basis = Xprojs[i].vectors, X_values = Xprojs[i].values)
+        end
+
+        if nXPCA > 0
+            r = (nXCCA+1):(nXCCA+nXPCA)
+            Xiv = Xprojs[i].vectors # shorthand
+            (XPCvecs, XPCvals) = get_PCA_vectors(X - (X * Xiv) * Xiv', nXPCA)
+            Xprojs[i].values[r] .= XPCvals
+            Xprojs[i].vectors[:,r] .= XPCvecs
+        end
 
         dummyvecs, dummyvals = get_dummy_vectors(X; dummydims = dummyXdims)
-        Xprojs[i].vectors[:,nXCCA+1:end] = dummyvecs
-        Xprojs[i].values[nXCCA+1:end] = dummyvals
+        Xprojs[i].vectors[:,nXCCA+nXPCA+1:end] = dummyvecs
+        Xprojs[i].values[nXCCA+nXPCA+1:end] = dummyvals
     end
 
     GPGeometry(Xprojs, Yproj, μX, σX, μY, σY, reg_CCA, Xtransf_spec)
@@ -353,11 +378,14 @@ function get_PCA_vectors(X::AbstractMatrix{T}, nPCA::Int) where T <: Real
     (vecs, vals) =  (Vt[:,1:nPCA], S[1:nPCA]  ./ sqrt(size(X)[1]-1.))
     return (vecs, vals)
 
-    # # Old method
-    # @time F = fasteigs(cov(X), nPCA)
-    # # display(vecs1 ./ F.vectors)
-    # # display(vals1 ./ F.values)
-    # return (vecs1, vals1)
+    # Old method
+    # @time F = fasteigs(cov(X_orig), nPCA)
+    # F = fasteigs(cov(X), nPCA)
+    # display(vecs1 ./ F.vectors)
+    # display(vals1 ./ F.values)
+    # display(F.vectors - vecs)
+    # display(F.values - vals.^2)
+    # return (F.vectors, sqrt.(F.values))
 end
 
 
