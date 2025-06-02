@@ -122,7 +122,7 @@ function train!(Ms::Vector{GPModel{T}};
                 mbargs::Dict{Symbol,H2} = Dict{Symbol,Any}(),
                 n::Int = 0, # override :n in mbargs
                 niter::Int = 0, # override :niter in mbargs
-                ϵ::T = zero(T), # override :ϵ in mbargs
+                ϵ::Real = zero(T), # override :ϵ in mbargs
                 navg::Int = 0,
                 quiet::Bool = true,
                 update_K::Bool = true) where {T<:Real,H1<:Any,H2<:Any}
@@ -133,7 +133,7 @@ function train!(Ms::Vector{GPModel{T}};
     # Handle overriding parameters if those were supplied
     (n != 0) && (mbargs[:n] = n)
     (niter != 0) && (mbargs[:niter] = niter)
-    (ϵ != 0.) && (optargs[:ϵ] = ϵ)
+    (ϵ != 0.) && (optargs[:ϵ] = T(ϵ))
 
     # n comes from the minibatch object that has not been constructed
     # yet. The default n_default is set in minibatching.jl
@@ -161,7 +161,6 @@ function train!(Ms::Vector{GPModel{T}};
     # update_K is run above by train!() in any case.
     update_K && update_GPModel!(Ms; update_K)
 
-
     quiet || print_parameters(Ms)
 end
 
@@ -182,7 +181,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     ndata, nλ = size(X) # number of input dimensions
     O.x .= logα # set initial value, optimization in log space
     nα = length(logα)
-    reg = T(1e-3)
+    reg = T(1e-4)
 
     # Reference Matern kernels for debugging. Uncomment:
     k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)
@@ -205,16 +204,23 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     # Reusable buffer to copy data to at each iteration
     local_Xbuf = similar(X, (B.n, nλ))
 
+    nancount = 0
     for i ∈ 1:B.niter
         quiet || ((i % 500 == 0) && println("Training round $i/$(B.niter)"))
 
         s = minibatch(B, exp.(O.x[1:nλ])) # Optimization is in log space
-
         local_Xbuf .= @views X[s,:]
+
         ρval, ξgrad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
 
-        ρval += T(1e-3) * sum(exp.(O.x)) # reg
-        ξgrad += T(1e-3) * exp.(O.x)
+        if isnan(ξgrad[1])
+            nancount += 1
+            continue
+        end
+
+        ρval += reg * sum(exp.(O.x)) # reg
+        ξgrad += reg * exp.(O.x)
+
 
         # Debug the no-LOO loss by train!()'ing with ρ_RMSE and uncommenting:
         # ξg_LOO = ξgrad[:] # Make a copy, as loss function overwrites this.
@@ -236,6 +242,10 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
 
         flowres.ρ_values[i] = ρval
         push!(flowres.α_values, exp.(O.x))
+    end
+
+    if nancount > 0
+        println("$nancount gradient(s) had NaNs.")
     end
 
     flowres
