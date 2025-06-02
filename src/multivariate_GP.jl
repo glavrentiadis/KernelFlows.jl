@@ -27,13 +27,32 @@ end
 include("multivariate_training.jl")
 include("multivariate_prediction.jl")
 
+
+
+"""Correctly updates model parameters so that MVM.Ms[i].λ and
+MVM.Ms[i].θ are concatenated into the columns newpars[:,i]. If
+requested, updates the coefficients M.h"""
+function update_parameters!(MVM::MVGPModel{T}, newpars::Matrix{<:Real}; update_K::Bool = false) where T <: Real
+    # Threads.@threads
+    for (i,M) in enumerate(MVM.Ms)
+        update_parameters!(M, newpars[:,i])
+    end
+
+    if update_K
+        update_GPModel!(MVM; update_K)
+    end
+end
+
+
 function update_MVGPModel!(MVM::MVGPModel{T}; kwargs...) where T <: Real
     update_GPModel!(MVM.Ms; kwargs...)
 end
 
+
 function update_MVGPModel!(MVMs::Vector{MVGPModel{T}}; kwargs...) where T <: Real
     update_GPModel!(vcat([MVM.Ms for MVM in MVMs]...); kwargs...)
 end
+
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
@@ -57,8 +76,10 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
     ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
 
-    λs = (Λ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Λ))
-    θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : collect(eachrow(Ψ))
+    ve(Λ::Matrix{T}) = [v[:] for v in eachrow(Λ)]
+
+    λs = (Λ == nothing) ? [nothing for _ ∈ 1:nZYdims] : ve(Λ)
+    θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : ve(Ψ)
 
     Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernels[i];
                   λ = λs[i], θ = θs[i], transform_zy) for i ∈ 1:nZYdims]
