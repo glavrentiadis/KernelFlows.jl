@@ -159,6 +159,7 @@ function pairwise_Euclidean!(X1::AbstractMatrix{T}, X2::AbstractMatrix{T},
     pb.M_cross .= pb.v_nte
     pb.M_cross .+= pb.v_ntr'
     BLAS.gemm!('N', 'T', T(-2), X1, X2, T(0), pb.M_lin) # -2 X1 * X2'
-    pb.M_cross .+= pb.M_lin .+ 1e-14
+    pb.M_cross .+= pb.M_lin
+    pb.M_cross[pb.M_cross .< zero(T)] .= zero(T)
     pb.M_cross .= sqrt.(pb.M_cross)
 end
