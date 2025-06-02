@@ -23,6 +23,12 @@ using Statistics
 using Distances
 
 
+
+
+nobs(H::Matrix) = size(H)[1]
+nobs(H::Vector{Matrix}) = size(H[1])[1]
+
+
 runningmedian(x, n) = [median(x[i:i+n]) for i ∈ 1:length(x)-n]
 RMSE(Y_true, Y_pred) = sqrt(sum((Y_true - Y_pred).^2)/size(Y_pred)[1])
 
@@ -41,29 +47,29 @@ seed can be fixed for reproducibility. By default the very edges of
 inputs values go to the training set, in order to avoid extrapolation
 and maximize coverage."""
 function split_data(X::Matrix{T}, Y::Matrix{T};
-                    ntr::Int = -1, nte::Int = 500,
+                    nte::Int = 500, ntr::Int = nobs(X) - nte,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(X, nte; seed, edges_to_training, ntr)
-    X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:]
+    X[s_tr,:], Y[s_tr,:], X[s_te,:], Y[s_te,:], s_tr, s_te
 end
 
 
 function split_data(X::Matrix{T}, Y_all::Vector{Matrix{T}};
-                    ntr::Int = -1, nte::Int = 500,
+                    nte::Int = 500, ntr::Int = nobs(X) - nte,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(X, nte; seed, edges_to_training, ntr)
-    X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all]
+    X[s_tr,:], [Y[s_tr,:] for Y in Y_all], X[s_te,:], [Y[s_te,:] for Y in Y_all], s_tr, s_te
 end
 
 
 function split_data(Zs::Vector{Matrix{T}};
-                    ntr::Int = -1, nte::Int = 500,
+                    nte::Int = 500, ntr::Int = nobs(Zs) - nte,
                     seed::UInt = rand(UInt),
                     edges_to_training::Int = 2) where T <: Real
     s_tr, s_te = randomsplit(Zs[1], nte; seed, edges_to_training, ntr)
-    [[Z[s_tr, :] for Z in Zs]..., [Z[s_te, :] for Z in Zs]...]
+    [[Z[s_tr, :] for Z in Zs]..., [Z[s_te, :] for Z in Zs]...], s_tr, s_te
 end
 
 
