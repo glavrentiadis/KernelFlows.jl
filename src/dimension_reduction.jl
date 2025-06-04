@@ -408,6 +408,13 @@ function reduce(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vecto
     X ./= σ' # scale
     @views H = P.vectors[:, P.spec.sparsedims] ./ P.values[P.spec.sparsedims]'
     X * H
+
+function reduce!(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T},
+                 Xbuf::Matrix{T}, Hbuf::Matrix{T}, Zbuf::Matrix{T}) where T <: Real
+    Xbuf .= (X .- μ') ./ σ'
+    Hbuf .= P.vectors ./ P.values'
+    mul!(Zbuf, Xbuf, Hbuf)
+    Zbuf
 end
 
 

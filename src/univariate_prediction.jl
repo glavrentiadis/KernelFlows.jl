@@ -61,13 +61,12 @@ function predict(M::GPModel{T}, X::AbstractMatrix{T}, pb::AbstractPredictionBuff
                  outbuf::Union{Nothing, AbstractVector{T}} = nothing) where T <: Real
 
     apply_λ && (X .*= M.λ')
-    # zero!(pb)
 
     # Allocate if buffers not given
     (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
 
     cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, pb)
-    @fastmath mul!(outbuf, pb.M_cross, M.h)
+    mul!(outbuf, pb.M_cross, M.h)
 
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
     outbuf

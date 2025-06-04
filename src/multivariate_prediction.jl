@@ -39,7 +39,6 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
     (nte, nXdims) = size(X)
     nzycols = length(MVM.Ms)
-    nzxcols = length(MVM.G.Xprojs[1].values)
     ZY_pred = zeros(T, (nte, nzycols))
 
     nt = Threads.nthreads()
@@ -47,12 +46,14 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
     # Predictive performance varies a lot according to maxalloc both
     # from processor to another and from application to another.
-    maxalloc = 2^28
+    # 2^26 seems to work fastest for 9900X, but 2^25 is safer for
+    # systems with less cache
+    maxalloc = 2^25
+
     chunksize = maxalloc ÷ 2 ÷ sizeof(T) ÷ ntr ÷ nt
     chunksize = min(chunksize, nte)
 
     nchunks = nte ÷ chunksize + 1
-
     kernel = MVM.Ms[1].kernel
 
     println("chunk size for prediction: $chunksize")
@@ -66,15 +67,29 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     # ranges() gives batch sizes which are not exactly of size chunksize
     chunksize = maximum(length.(batches))
 
-    bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols) for _ in 1:nt]
     tasks = collect(Iterators.product(Mlist, batches))[:]
 
-    Threads.@threads :static for (i,batch_I) in tasks
-        tid = Threads.threadid()
-        Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], MVM.G, i)) : (@views X[batch_I, :])
+    nzxcols = length(MVM.G.Xprojs[1].values)
+    bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols) for _ in 1:nt]
 
+    if reduce_inputs
+        Zbufs = [zeros(T, (chunksize, nzxcols)) for _ in 1:nt]
+        Xbufs = [zeros(T, (chunksize, nXdims)) for _ in 1:nt]
+        Hbufs = [zeros(T, (nXdims, nzxcols)) for _ in 1:nt]
+    end
+
+    Threads.@threads for (i,batch_I) in tasks
+        tid = Threads.threadid()
         bs = length(batch_I) # batch size
-        pb = bs == bufs[tid].nte ? bufs[tid] : PredictionBuffer(kernel, ntr, bs, nzxcols)
+
+        if bs == bufs[tid].nte
+            Z = @views reduce!(X[batch_I,:], MVM.G.Xprojs[i], MVM.G.μX, MVM.G.σX,
+                               Xbufs[tid], Hbufs[tid], Zbufs[tid]);
+            pb = bufs[tid]
+        else
+                Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], MVM.G, i)) : (@views X[batch_I, :])
+            pb = PredictionBuffer(kernel, ntr, bs, nzxcols)
+        end
 
         # Do the prediction in-place directly to outbuf
         @views predict(MVM.Ms[i], Z, pb; apply_λ, apply_zyinvtransf,
