@@ -14,7 +14,10 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export MVGPModel, update_MVGPModel!, trim_MVGP_data, remove_extrapolations
+export MVGPModel, update_MVGPModel!, trim_MVGP_data, remove_extrapolations, set_parameters!, get_parameters, save_parameters, load_parameters!
+
+
+using DelimitedFiles
 
 
 """Multivariate GP for multivariate input - multivariate output relations"""
@@ -28,19 +31,45 @@ include("multivariate_training.jl")
 include("multivariate_prediction.jl")
 
 
-
 """Correctly updates model parameters so that MVM.Ms[i].λ and
 MVM.Ms[i].θ are concatenated into the columns newpars[:,i]. If
 requested, updates the coefficients M.h"""
-function update_parameters!(MVM::MVGPModel{T}, newpars::Matrix{<:Real}; update_K::Bool = false) where T <: Real
-    # Threads.@threads
+function set_parameters!(MVM::MVGPModel{T}, newpars::Matrix{<:Real};
+                         update_K::Bool = false) where T <: Real
     for (i,M) in enumerate(MVM.Ms)
         update_parameters!(M, newpars[:,i])
     end
 
     if update_K
-        update_GPModel!(MVM; update_K)
+        update_MVGPModel!(MVM; update_K)
     end
+end
+
+
+function get_parameters(MVM::MVGPModel{T}) where T <: Real
+    hcat([vcat(M.λ, M.θ) for M in MVM.Ms]...)
+end
+
+
+function set_parameters!(MVM::MVGPModel{T}; λ::T = one(T), θ::Vector{T} = T[],
+                         update_K::Bool = false) where T <: Real
+    newpars = get_parameters(MVM)
+    newpars[1:end-4,:] .= λ
+
+    if length(θ) != 0
+        newpars[end-3:end] .= θ
+    end
+    set_parameters!(MVM, newpars; update_K)
+end
+
+
+function load_parameters!(MVM::MVGPModel{T}, fname::String; update_K::Bool = false) where T <: Real
+    set_parameters!(MVM, readdlm(fname, T); update_K)
+end
+
+
+function save_parameters(MVM::MVGPModel{T}, fname::String) where T <: Real
+    writedlm(fname, get_parameters(MVM))
 end
 
 
