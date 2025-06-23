@@ -133,7 +133,11 @@ function train!(Ms::Vector{GPModel{T}};
     # Handle overriding parameters if those were supplied
     (n != 0) && (mbargs[:n] = n)
     (niter != 0) && (mbargs[:niter] = niter)
+
+    # Need to deal with typing here a bit...
+    optargs = Dict{Symbol, Any}(optargs)
     (ϵ != 0.) && (optargs[:ϵ] = T(ϵ))
+    display(optargs)
 
     # n comes from the minibatch object that has not been constructed
     # yet. The default n_default is set in minibatching.jl
