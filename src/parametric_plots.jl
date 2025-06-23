@@ -86,7 +86,7 @@ function plot_training(MVM::MVGPModel; p = nothing, title = "", Ylist::AbstractV
         λs = log.(hcat(M.λ_training...)[:,m])
         nXCCA = MVM.G.Xprojs[j].spec.nCCA # number of X CCA vectors for this Y dim
         Plots.plot!(p[i], m, λs[1:nXCCA,:]', legend = false, xformatter = _ -> "", xlims = (m[1], m[end]))
-        Plots.plot!(p[i], m, λs[nXCCA+1:end,:]', legend = false, color = "gray", alpha = .2)
+        Plots.plot!(p[i], m, λs[nXCCA+1:end,:]', legend = false, color = "gray", alpha = .3)
         Plots.plot!(p[i+nY], m, log.(hcat(M.θ_training...)[:,m]'), xlims = (m[1], m[end]),
                     legend = false, xformatter = _ -> "", top_margin = 0mm)
 
