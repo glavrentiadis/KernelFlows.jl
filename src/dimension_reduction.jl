@@ -272,8 +272,14 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
 
         if nXPCA > 0
             r = (nXCCA+1):(nXCCA+nXPCA)
-            Xiv = Xprojs[i].vectors # shorthand
-            (XPCvecs, XPCvals) = get_PCA_vectors(X - (X * Xiv) * Xiv', nXPCA)
+
+            # New behavior: XPCA and XCCA vectors are dependent
+            (XPCvecs, XPCvals) = get_PCA_vectors(X, nXPCA)
+
+            # Old behavior: XCCA and XPCA vectors are orthogonal
+            # Xiv = Xprojs[i].vectors # shorthand
+            # (XPCvecs, XPCvals) = get_PCA_vectors(X - (X * Xiv) * Xiv', nXPCA)
+
             Xprojs[i].values[r] .= XPCvals
             Xprojs[i].vectors[:,r] .= XPCvecs
         end
