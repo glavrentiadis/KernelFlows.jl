@@ -57,7 +57,7 @@ function set_parameters!(MVM::MVGPModel{T}; λ::T = one(T), θ::Vector{T} = T[],
     newpars[1:end-4,:] .= λ
 
     if length(θ) != 0
-        newpars[end-3:end] .= θ
+        newpars[end-3:end,:] .= θ
     end
     set_parameters!(MVM, newpars; update_K)
 end
