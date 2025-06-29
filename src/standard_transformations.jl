@@ -157,14 +157,18 @@ function PiecewiseLinearMap(v::AbstractVector{T}; n::Int = 100, mapping::Symbol 
     nodes = zeros(T, n+2)
     nodes[2:end-1] = vs[idx]
 
+    # We assume that this many would go outside the bounds at most on
+    # average. In other words, if v contains 100 iid samples, you'd
+    # expect at most 1% of samples to be outside the values in v
+    leftout_part = T(1)/length(v)
+    δ = leftout_part / T(2) # Both-sided leftout part here
+    v = collect(range(δ, 1-δ; length = n))
     if mapping == :uniform
-        values[2:end-1] = collect((1:n) ./ n)
-    elseif mapping == :gaussian
-        v = collect((.5:1:n-.5) ./ n)
-        v = invlogcdf(Normal(), log.(v))
         values[2:end-1] = v
+    elseif mapping == :gaussian
+        values[2:end-1] = invlogcdf(Normal(), log.(v))
     elseif mapping == :log
-        values[2:end-1] = log.(collect((1:n) ./ n))
+        values[2:end-1] = log.(v)
     # Decreasing transformations do not work currently
     # elseif mapping == :reciprocal
     #     values[2:end-1] = 1. ./ (collect((1:n) ./ n))
@@ -244,9 +248,9 @@ function test_PiecewiseLinearMap(p::PiecewiseLinearMap{T}) where T
 end
 
 
-function test_PiecewiseLinearMap()
+function test_PiecewiseLinearMap(s::Symbol)
     Y_tr = rand(1000,1000) # fake training data
-    P = PiecewiseLinearMaps(Y_tr; mapping = :gaussian)
+    P = PiecewiseLinearMaps(Y_tr; mapping = s)
     Y_te = rand(2000,1000) # fake test data
     h = maximum(abs.(tr_inv(P, tr_fwd(P, Y_te)) - Y_te))
     println("Maximum error from invertible transformations: $h")
