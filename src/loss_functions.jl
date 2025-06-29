@@ -44,7 +44,7 @@ end
 
 
 """Maximum likelihood."""
-function ρ_MLE(X::AbstractArray{T}, y::AbstractVector{Float64}, k::AutodiffKernel, logθ::AbstractArray{T}) where T
+function ρ_MLE(X::AbstractArray{T}, y::AbstractVector{H}, k::AutodiffKernel, logθ::AbstractArray{T}) where {T,H}
     n = length(y)
     Ω = kernel_matrix(k, logθ, X)
 
