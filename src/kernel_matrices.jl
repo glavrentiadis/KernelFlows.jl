@@ -1,13 +1,14 @@
-function sqr(x::T) where T <: Real
-    sqrt(x+eps(T))
-end
+# function sqr(x::T) where T <: Real
+#     sqrt(x + T(10)*eps(T))
+# end
 
 
 """A Distances.pairwise() workalike, but works with Zygote"""
 function pairwise_Euclidean(X::AbstractMatrix{T}) where T <: Real
     H = T(-2.) * X * X'
     D = T(.5) * diag(H)
-    sqr.(Symmetric(H .- D .- D'))
+    P = Symmetric(H .- D .- D')
+    sqrt.(P .- minimum(P) .+ 5*eps(T))
 end
 
 
@@ -21,9 +22,8 @@ function kernel_matrix(k::UnaryKernel, logθ::AbstractVector{T}, X::AbstractArra
     H1 = @fastmath pairwise_Euclidean(X)
 
     δ = exp(-12) + exp(logθ[4])
-    H2 = @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
+    @fastmath k.k.(H1, exp(logθ[1]), exp(logθ[2])) +
         Diagonal(δ * ones(T, size(X)[1])) + exp(logθ[3]) * KK
-    H2
 end
 
 
