@@ -41,6 +41,22 @@ function splitrange(start::Int, stop::Int, nodes::Int)
 end
 
 
+"""Splits range start:stop into nranges parts. Example:
+
+    ranges(11, 20, 3)
+
+    3-element Vector{UnitRange{Int64}}:
+      11:14
+      15:17
+      18:20
+"""
+function ranges(start::Int, stop::Int, nranges::Int)
+    r = splitrange(start, stop, nranges)
+    r[2:end] .+= 1
+    [a:b for (a,b) in zip(r[1:end-1], r[2:end] .- 1)]
+end
+
+
 """Split inputs X and outputs Y randomly into training and
 testing. The number of points in testing is given by kwarg nte. Random
 seed can be fixed for reproducibility. By default the very edges of
