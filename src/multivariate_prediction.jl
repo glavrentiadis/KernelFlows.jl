@@ -56,7 +56,7 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     nchunks = nte ÷ chunksize + 1
     kernel = MVM.Ms[1].kernel
 
-    println("chunk size for prediction: $chunksize")
+    (chunksize < nte) && (println("chunk size for prediction: $chunksize"))
 
     ck = collect(0:chunksize:nchunks*chunksize)
     ck[end] = nte

@@ -88,7 +88,8 @@ function train!(M::GPModel{T};
                 navg::Int = 0,
                 wbs::AbstractWorkBuffers = get_wbs(M, n),
                 quiet::Bool = true,
-                update_K::Bool = true) where {T<:Real,H1<:Any,H2<:Any}
+                update_K::Bool = true,
+                offset_meangrad_start::Int = 2^31) where {T<:Real,H1<:Any,H2<:Any}
 
     logα = get_logα(M)
     nλ = length(M.λ)
@@ -96,7 +97,7 @@ function train!(M::GPModel{T};
     Z = M.Z ./ M.λ'
     O = get_optimizer(optalg, similar(logα); optargs)
     B = get_minibatcher(mbalg, Z; mbargs)
-    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; O, B, wbs, quiet)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; O, B, wbs, offset_meangrad_start, quiet)
 
     if length(flowres.α_values) > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -125,7 +126,8 @@ function train!(Ms::Vector{GPModel{T}};
                 ϵ::Real = zero(T), # override :ϵ in mbargs
                 navg::Int = 0,
                 quiet::Bool = true,
-                update_K::Bool = true) where {T<:Real,H1<:Any,H2<:Any}
+                update_K::Bool = true,
+                offset_meangrad_start::Int = 2^31) where {T<:Real,H1<:Any,H2<:Any}
 
     nM = length(Ms)
     nα = maximum([length(M.λ) + 4 for M in Ms])
@@ -155,7 +157,7 @@ function train!(Ms::Vector{GPModel{T}};
     Threads.@threads :static for M in Ms
         tid = Threads.threadid()
         train!(M; ρ, optalg, optargs, mbalg, mbargs, navg, update_K = false,
-               wbs = all_wbs[tid], quiet)
+               wbs = all_wbs[tid], quiet, offset_meangrad_start)
         computed[Threads.threadid()] += 1
         print("\rCompleted $(sum(computed))/$nM tasks...")
     end
@@ -179,7 +181,8 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
               O::AbstractOptimizer = AMSGrad(logα),
               B::AbstractMinibatch = RandomPartitions(length(ζ), 1000, n_default),
               wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)), # buffers
-              quiet::Bool = true) where T <: Real
+              quiet::Bool = true,
+              offset_meangrad_start::Int = 2^31) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
     ndata, nλ = size(X) # number of input dimensions
@@ -217,14 +220,29 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
 
         ρval, ξgrad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
 
-        if isnan(ξgrad[1])
+        # In the event of NaNs we just skip this iteration
+        if isnan(sum(ξgrad))
             nancount += 1
             continue
         end
 
-        ρval += reg * sum(exp.(O.x)) # reg
+        # Add regularization
+        ρval += reg * sum(exp.(O.x))
         ξgrad += reg * exp.(O.x)
 
+        # If iteration number is larger than offset_meangrad_start,
+        # (log) parameter averages are fixed to stay constant. This
+        # prevents regularization from pushing parameters with small
+        # gradients down through the floor, which may be problematic
+        # in very long training runs. The kernels still have
+        # sufficient flexibility to work well, at least as long as
+        # some training has been done to first find the overall scale
+        # needed by the loss function.
+        if i > offset_meangrad_start
+            meanξgrad = -sum(ξgrad) / nα
+            ρval += meanξgrad * sum(exp.(O.x)) # reg
+            ξgrad .+= meanξgrad # * exp.(O.x)
+        end
 
         # Debug the no-LOO loss by train!()'ing with ρ_RMSE and uncommenting:
         # ξg_LOO = ξgrad[:] # Make a copy, as loss function overwrites this.
