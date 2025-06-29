@@ -158,7 +158,7 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
 
     print("\rCompleted 0/$nM tasks...")
     if parallel
-        nt = Threads.nthreads()
+        nt = min(Threads.nthreads(), length(Ms))
         bufs = u(ndata, nt)
         computed = zeros(Int, nt)
 
