@@ -249,7 +249,10 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     end
 
     if nancount > 0
-        println("$nancount gradient(s) had NaNs.")
+        println("\n\n#################################################")
+        println("$nancount gradient(s) out of $(B.niter) had NaNs!!!!")
+        println("Check that you don't have duplicate data points in \nyour training. You should also check if the added eps is \nsufficiently large for your dimension and floating point type \nin the function kernel_matrices.jl:sqr().")
+        println("############################################\n\n")
     end
 
     flowres
