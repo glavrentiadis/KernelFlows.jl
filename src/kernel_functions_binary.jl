@@ -146,3 +146,4 @@ end
 
 #add kernels specific to ngmm
 include("kernel_functions_binary_seismic.jl")
+include("kernel_functions_binary_hybrid.jl")

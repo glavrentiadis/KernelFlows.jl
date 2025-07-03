@@ -14,7 +14,7 @@
 #
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
-export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, kernel_matrix, kernel_matrix_fast, deciles, split_data
+export runningmedian, RMSE, splitrange, renormalize_columns, rebalance_data, get_random_partitions, get_group_partitions, kernel_matrix, kernel_matrix_fast, deciles, split_data
 
 using LinearAlgebra
 using Random
@@ -105,16 +105,39 @@ function deciles(y::Vector{T}) where T <: Real
 end
 
 
-"""Randomly split ndata data points into n subsets. This makes sure
-all training data are equally often sampled in SGD. Returns a vector
-of vectors, each one of which contains indices for minibatches for
-each iteration"""
+"""Randomly split ndata data points into n-size subsets. This makes 
+sure all training data are equally often sampled in SGD. Returns a 
+vector of vectors, each one of which contains indices for minibatches
+for each iteration"""
 function get_random_partitions(ndata::Int, n::Int, niter::Int)
     k = ndata ÷ n # shorthand
     m = round(Int, (niter / k) + 1) # how many times data needs to be partitioned
     R = [randperm(ndata) for _ ∈ 1:m]
     samples = [reshape(r[1:k*n], (k, n)) for r ∈ R]
     [collect(r) for r in eachrow(vcat(samples...)[1:niter,:])]
+end
+
+"""Randomly split ndata data points into n-size subsets ensuing each
+subset has common group id. This makes sure all groups of data are 
+equally often sampled in SGD. Returns a vector of vectors, each one 
+of which contains indices for minibatches for each iteration"""
+function get_group_partitions(group_id::AbstractArray{Int}, ndata::Int, n::Int, niter::Int)
+    #selected groups
+    group_ids = rand( unique(group_id), niter)
+    #selected indices
+    samples = []
+    for gid in group_ids
+        idx = findall(group_id .== gid)
+        idx = shuffle(idx)[1 : min(end, n)]
+        if length(idx) < n
+            println("Warning: group ", gid, " has less than ", n, " data points.")
+            idx = vcat(idx, rand(setdiff(1:ndata, idx), n - length(idx)))
+        end
+        
+        push!(samples, idx[1:n])
+    end
+
+    return samples, group_ids
 end
 
 

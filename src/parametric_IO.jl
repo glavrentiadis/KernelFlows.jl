@@ -277,6 +277,7 @@ function load_MVGPModel(fname::String; grpname::Union{Nothing, String} = nothing
         println(file.root_group)
         # blah
         grp = file.root_group
+
         MVM = load_MVGPModel(grp)
     end
 

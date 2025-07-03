@@ -92,6 +92,9 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
              :pathsite_exp_binary               => pathsite_exp_binary,
              :sourcepathsite_exp_binary         => sourcepathsite_exp_binary,
              :site_exp_aleat_binary             => site_exp_aleat_binary,
+             :source_exp_aleat_binary           => source_exp_aleat_binary,
+             :path_exp_aleat_binary             => path_exp_aleat_binary,
+             :intpath_exp_aleat_binary          => intpath_exp_aleat_binary,
              :sourcesite_exp_aleat_binary       => sourcesite_exp_aleat_binary,
              :pathsite_exp_aleat_binary         => pathsite_exp_aleat_binary,
              :sourcepathsite_exp_aleat_binary   => sourcepathsite_exp_aleat_binary,
@@ -104,9 +107,13 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
              :sourcepathsite_matern_binary       => sourcepathsite_matern_binary,
              :site_matern_aleat_binary           => site_matern_aleat_binary,
              :source_matern_aleat_binary         => source_matern_aleat_binary,
+             :path_matern_aleat_binary           => path_matern_aleat_binary,
+             :intpath_matern_aleat_binary        => intpath_matern_aleat_binary,
              :sourcesite_matern_aleat_binary     => sourcesite_matern_aleat_binary,
              :pathsite_matern_aleat_binary       => pathsite_matern_aleat_binary,
              :sourcepathsite_matern_aleat_binary => sourcepathsite_matern_aleat_binary,
+             #hybrid kernels
+             :hybrid_sourcepathsite_matern_aleat_hybrid_binary => hybrid_sourcepathsite_matern_aleat_binary
              )
     #intial nugget
     # θ_nugget = T.(exp(.0))
@@ -114,7 +121,7 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     
     #initial hyper-parameters
     if s  == :linear_binary
-        θ₀_B = [exp.([0., -7.]) for XP in G.Xprojs]
+        θ₀_B = [exp.([0., 0.]) for XP in G.Xprojs]
     elseif s == :linear_mean_binary
         # get number of transformed X dims, plus nugget and weight
         θ₀_B = [ones(T, length(XP.spec.sparsedims) + 2) for XP in G.Xprojs]
@@ -124,14 +131,17 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
         θ₀_B = T.(exp.([0., 0., 0., 0., 0.]))
     elseif s == :sourcepathsite_exp_binary || s == :sourcepathsite_matern_binary
         θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., 0.]))
-    elseif s == :site_exp_aleat_binary || s == :source_exp_aleat_binary || s == :site_matern_aleat_binary || s == :source_matern_aleat_binary
-        θ₀_B = T.(exp.([0., 0., -7., -7.]))
+    elseif (s == :site_exp_aleat_binary || s == :source_exp_aleat_binary || s == :path_exp_aleat_binary || s == :intpath_exp_aleat_binary ||
+            s == :site_matern_aleat_binary || s == :source_matern_aleat_binary || s == :path_matern_aleat_binary || s == :intpath_matern_aleat_binary)
+        θ₀_B = T.(exp.([0., 0., 0., 0.]))
     elseif s == :pathsite_exp_aleat_binary || s == :sourcesite_exp_aleat_binary || s == :pathsite_matern_aleat_binary || s == :sourcesite_matern_aleat_binary
-        θ₀_B = T.(exp.([0., 0., 0., 0., -7., -7.]))
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0.]))
     elseif s == :sourcepathsite_exp_aleat_binary || s == :sourcepathsite_matern_aleat_binary
-        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., -7., -7.]))
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., 0., 0.]))
+    elseif s == :hybrid_sourcepathsite_matern_aleat_binary
+        θ₀_B = T.(exp.([0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]))
     else
-        θ₀_B = T.(exp.([0., 0., -7.]))
+        θ₀_B = T.(exp.([0., 0., 0.]))
     end
 
     #update nugget hyper-parameter
@@ -141,7 +151,7 @@ function get_VectBinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
         end
     elseif s in (:site_exp_aleat_binary, :source_exp_aleat_binary, :site_matern_aleat_binary, :source_matern_aleat_binary,
                  :pathsite_exp_aleat_binary, :sourcesite_exp_aleat_binary, :pathsite_matern_aleat_binary, :sourcesite_matern_aleat_binary,
-                 :sourcepathsite_exp_aleat_binary, :sourcepathsite_matern_aleat_binary)
+                 :sourcepathsite_exp_aleat_binary, :sourcepathsite_matern_aleat_binary, :hybrid_sourcepathsite_matern_aleat_binary)
         θ₀_B[end-1:end] .= θ_nugget
     else
         θ₀_B[end] = θ_nugget
@@ -167,16 +177,18 @@ function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
                        :source_exp_binary, :path_exp_binary, :site_exp_binary, 
                        :sourcesite_exp_binary, :pathsite_exp_binary,
                        :sourcepathsite_exp_binary,
-                       :site_exp_aleat_binary, :path_exp_aleat_binary, :source_exp_aleat_binary, 
+                       :site_exp_aleat_binary, :path_exp_aleat_binary, :intpath_exp_aleat_binary, :source_exp_aleat_binary, 
                        :sourcesite_exp_aleat_binary, :pathsite_exp_aleat_binary,
                        :sourcepathsite_exp_aleat_binary,
                        #matern seismic kernels
                        :source_matern_binary, :path_matern_binary, :site_matern_binary,
                        :sourcesite_matern_binary, :pathsite_matern_binary,
                        :sourcepathsite_matern_binary,
-                       :site_matern_aleat_binary, :path_matern_aleat_binary, :source_matern_aleat_binary,
+                       :site_matern_aleat_binary, :path_matern_aleat_binary, :intpath_matern_aleat_binary, :source_matern_aleat_binary,
                        :sourcesite_matern_aleat_binary, :pathsite_matern_aleat_binary,
                        :sourcepathsite_matern_aleat_binary
+                       #hybrid kernels
+                       :hybrid_sourcepathsite_matern_aleat_binary
                        ]
     binary_kernels = [:linear_binary, :linear_mean_binary, 
                       :group_binary, :spherical_exp_binary]

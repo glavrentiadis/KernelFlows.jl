@@ -93,6 +93,21 @@ GSPathMaternKernel = PathKernel(n_integ_pt,
                                 KernelFunctions.Matern32Kernel( ;metric=KernelFunctions.Euclidean()), 
                                 flag_normalize) 
 
+#geometrical spreading exponential kernel
+n_integ_pt=5
+flag_normalize=false
+GSPathExpKernelInteg = PathKernel(n_integ_pt, 
+                                  KernelFunctions.ExponentialKernel( ;metric=KernelFunctions.Euclidean()), 
+                                  flag_normalize)
+
+#geometrical spreading Matern kernel
+n_integ_pt=5
+flag_normalize=false
+t, s, w = gaussquad2d(n_integ_pt) #compute integration weights
+GSPathMaternKernelInteg = PathKernel(n_integ_pt, 
+                                     KernelFunctions.Matern32Kernel( ;metric=KernelFunctions.Euclidean()), 
+                                     flag_normalize) 
+
 """
     Binary path kernel function
 """
@@ -138,6 +153,26 @@ function path_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, θ
     
     #evaluate path kernel
     return path_binary(X₁, X₂, θₚ, GSPathMaternKernel)
+end
+
+"""
+    Binary path exponential kernel integral function
+"""
+function intpath_exp_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, 
+                            θₚ::AbstractVector{T}) where T <: Real
+    
+    #evaluate path kernel
+    return path_binary(X₁, X₂, θₚ, GSPathExpKernelInteg)
+end
+
+"""
+    Binary path Matern kernel integral function
+"""
+function intpath_matern_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T}, 
+                               θₚ::AbstractVector{T}) where T <: Real
+    
+    #evaluate path kernel
+    return path_binary(X₁, X₂, θₚ, GSPathMaternKernelInteg)
 end
 
 # Composite Non-ergodic Kernels
@@ -337,6 +372,40 @@ function path_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{
 end
 
 """
+    Binary integral path exponential kernel function with between event aleatory variability
+"""
+function intpath_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                  θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₚ = @view θ[1:2] #path parametes
+    θₐ = @view θ[3]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views intpath_exp_binary(X₁[:,2:end], X₂[:,2:end], θₚ)
+    
+    return Kₜ
+end
+
+"""
+    Binary integral path Matern kernel function with between event aleatory variability
+"""
+function intpath_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
+                                       θ::AbstractVector{T}) where T <: Real
+    
+    #hyperparameters
+    θₚ = @view θ[1:2] #path parametes
+    θₐ = @view θ[3]   #aleatory parameters
+
+    #evaluate total kernel
+    Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
+    Kₜ += @views intpath_matern_binary(X₁[:,2:end], X₂[:,2:end], θₚ)
+    
+    return Kₜ
+end
+
+"""
     Binary exponential site kernel function with between event aleatory variability
 """
 function site_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
@@ -346,12 +415,9 @@ function site_exp_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{T},
     θₛ = @view θ[1:2] #site parametes
     θₐ = @view θ[3]   #aleatory parameters
 
-    #coordinate size
-    d = div(length(X₁), 2) 
-
     #evaluate total kernel
     Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
-    Kₜ += @views site_exp_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    Kₜ += @views site_exp_binary(X₁[:,2:end], X₂[:,2:end], θₛ)
     
     return Kₜ
 end
@@ -366,12 +432,9 @@ function site_matern_aleat_binary(X₁::AbstractMatrix{T}, X₂::AbstractMatrix{
     θₛ = @view θ[1:2] #site parametes
     θₐ = @view θ[3]   #aleatory parameters
 
-    #coordinate size
-    d = div(length(X₁), 2) 
-
     #evaluate total kernel
     Kₜ  = @views aleat_bevent_binary(X₁[:,1], X₂[:,1], θₐ)
-    Kₜ += @views site_matern_binary(X₁[:,(d+1):end], X₂[:,(d+1):end], θₛ)
+    Kₜ += @views site_matern_binary(X₁[:,2:end], X₂[:,2:end], θₛ)
     
     return Kₜ
 end
