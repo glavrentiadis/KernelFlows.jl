@@ -141,7 +141,10 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
                    nXPCA::Int = 0, nXCCA::Int = 1,
                    dummyXdims::Union{Bool, AbstractVector{Int}} = true,
                    reg_CCA::Real = 1e-2, reg_CCA_X::Real = reg_CCA,
-                   maxdata::Int = 3000, scale_Y::Bool = false) where T <: Real
+                   maxdata::Int = 3000,
+                   scale_X::Bool = true, # scale all X to unit variance
+                   scale_Y::Bool = false # scale all Y to unit variance
+                   ) where T <: Real
 
     X, Xtransf_spec = standard_transformations(X; deg = Xtransf_deg, ϵ = Xtransf_ϵ)
 
@@ -190,7 +193,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     # Get mean and standard deviation for centering and scaling data
     μX = mean(X, dims = 1)[:]
     μY = mean(Y, dims = 1)[:]
-    σX = std(X, dims = 1)[:]
+    σX = scale_X ? std(X, dims = 1)[:] : one(μX)
 
     # No special handling for YdimsC dimensions, so that σY should be
     # the same, no matter what Ydims kwarg was given.
@@ -202,7 +205,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
 
     # Override Y scaling if scale_Y = false
     if !scale_Y
-        σY[Ynonconstdims] .= 1.0
+        σY[Ynonconstdims] .= one(T)
     end
 
     σY .= max.(eps(T), σY) # reduce() divides by σY

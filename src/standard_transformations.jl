@@ -41,7 +41,7 @@ function polyexpand(X::AbstractMatrix{T}, degs::AbstractVector{Int}) where T <: 
         return
     end
 
-    X_new = zeros(ndata, ncols_new)
+    X_new = zeros(T, (ndata, ncols_new))
     for (i,co) ∈ enumerate(all_combs)
         X_new[:,i] .= X[:,co[1]]
         for d ∈ co[2:end]
