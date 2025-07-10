@@ -188,14 +188,14 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     ndata, nλ = size(X) # number of input dimensions
     O.x .= logα # set initial value, optimization in log space
     nα = length(logα)
-    reg = T(1e-4)
+    reg0 = T(1e-2)
+    reg = reg0
 
     # Reference Matern kernels for debugging. Uncomment:
     k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)
 
     ξ(k::AutodiffKernel, X, ζ, logα) =
-        ρ(X .* exp.(logα[1:nλ]'), ζ, k, logα[end-3:end]) +
-        reg * sum(exp.(logα))
+        ρ(X .* exp.(logα[1:nλ]'), ζ, k, logα[end-3:end])
     ∇ξ(k::AutodiffKernel, X, ζ, logα) = Zygote.gradient(logα -> ξ(k, X, ζ, logα), logα)
     ξ_and_∇ξ(k::AutodiffKernel, X, ζ, logα) = (ξ(k, X, ζ, logα), ∇ξ(k, X, ζ, logα)[1])
 
@@ -211,9 +211,14 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
     # Reusable buffer to copy data to at each iteration
     local_Xbuf = similar(X, (B.n, nλ))
 
+    reg_adapt_idx = (2:100).^3 # adapt regularization at these iterations
+
     nancount = 0
     for i ∈ 1:B.niter
         quiet || ((i % 500 == 0) && println("Training round $i/$(B.niter)"))
+
+        # Update regularization based on loss function values
+        ((i in reg_adapt_idx) && (reg = reg0*sum(flowres.ρ_values[1:i-1])/i))
 
         s = minibatch(B, exp.(O.x[1:nλ])) # Optimization is in log space
         local_Xbuf .= @views X[s,:]
