@@ -79,6 +79,12 @@ function best_α_from_flowres(flowres::FlowRes{T};
 end
 
 
+function default_reg(M::GPModel{T}) where T
+    l = length(M.ρ_values)
+    reg = l == 0 ? T(1e-2) : T(1e-2) * median(M.ρ_values[max(1, l - 99):end])
+end
+
+
 function train!(M::GPModel{T};
                 ρ::Function = ρ_RMSE,
                 optalg::Symbol = :AMSGrad,
@@ -89,7 +95,8 @@ function train!(M::GPModel{T};
                 wbs::AbstractWorkBuffers = get_wbs(M, n),
                 quiet::Bool = true,
                 update_K::Bool = true,
-                offset_meangrad_start::Int = 2^31) where {T<:Real,H1<:Any,H2<:Any}
+                offset_meangrad_start::Int = 2^31,
+                reg::T = default_reg(M)) where {T<:Real,H1<:Any,H2<:Any}
 
     logα = get_logα(M)
     nλ = length(M.λ)
@@ -97,7 +104,7 @@ function train!(M::GPModel{T};
     Z = M.Z ./ M.λ'
     O = get_optimizer(optalg, similar(logα); optargs)
     B = get_minibatcher(mbalg, Z; mbargs)
-    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; O, B, wbs, offset_meangrad_start, quiet)
+    flowres = flow(Z, M.ζ, ρ, M.kernel, logα; O, B, wbs, offset_meangrad_start, quiet, reg)
 
     if length(flowres.α_values) > 0 # update parameters from training
         α = best_α_from_flowres(flowres; navg, quiet)
@@ -182,14 +189,14 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
               B::AbstractMinibatch = RandomPartitions(length(ζ), 1000, n_default),
               wbs::AbstractWorkBuffers = get_wbs(k, n, length(logα)), # buffers
               quiet::Bool = true,
-              offset_meangrad_start::Int = 2^31) where T <: Real
+              offset_meangrad_start::Int = 2^31,
+              reg::T = T(1e-2)) where T <: Real
 
     Random.seed!(1235) # fix for reproducibility (minibatching)
     ndata, nλ = size(X) # number of input dimensions
     O.x .= logα # set initial value, optimization in log space
     nα = length(logα)
     reg0 = T(1e-2)
-    reg = reg0
 
     # Reference Matern kernels for debugging. Uncomment:
     k_ref = UnaryKernel(Matern32, exp.(logα[end-3:end]), nλ)
@@ -218,7 +225,11 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
         quiet || ((i % 500 == 0) && println("Training round $i/$(B.niter)"))
 
         # Update regularization based on loss function values
-        ((i in reg_adapt_idx) && (reg = reg0*sum(flowres.ρ_values[1:i-1])/i))
+        if i in reg_adapt_idx
+            i0 = max(1, i-100)
+            median_loss = sort(flowres.ρ_values[i0:i-1])[(i-i0)÷2]
+            reg = reg0 * median_loss
+        end
 
         s = minibatch(B, exp.(O.x[1:nλ])) # Optimization is in log space
         local_Xbuf .= @views X[s,:]
@@ -233,7 +244,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
 
         # Add regularization
         ρval += reg * sum(exp.(O.x))
-        ξgrad += reg * exp.(O.x)
+        ξgrad[1:end-1] .+= reg * exp.(O.x[1:end-1])
 
         # If iteration number is larger than offset_meangrad_start,
         # (log) parameter averages are fixed to stay constant. This
