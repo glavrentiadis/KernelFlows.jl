@@ -421,12 +421,18 @@ end
 
 """Move from original coordinates to dimension-reduced (or augmented)
 coordinates."""
+# function reduce(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T}) where T <: Real
+#     @time X = (X .- μ') ./ σ' # center and scale
+#     # X ./= σ' # scale
+#     @views H = P.vectors[:, P.spec.sparsedims] ./ P.values[P.spec.sparsedims]'
+#     X * H
+# end
+
+
 function reduce(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T}) where T <: Real
-    X = X .- μ' # center
-    X ./= σ' # scale
-    @views H = P.vectors[:, P.spec.sparsedims] ./ P.values[P.spec.sparsedims]'
-    X * H
+    ((X .- μ') ./ σ') * (P.vectors ./ P.values') # center, scale and project
 end
+
 
 function reduce!(X::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T},
                  Xbuf::Matrix{T}, Hbuf::Matrix{T}, Zbuf::Matrix{T}) where T <: Real
