@@ -172,8 +172,11 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     nYPCA = min(nYPCA, nY_full - nYCCA)
     nYCCA == 0 && (reg_CCA = zero(T))
 
+    # XPCA and XCCA vectors are linearly dependent, and for this
+    # reason their total number does not need to be under length of
+    # one input
     nXCCA = min(nXCCA, size(X)[2])
-    nXPCA = min(nXPCA, size(X)[2] - nXCCA)
+    nXPCA = min(nXPCA, size(X)[2])
 
     # If there are no CCA or PCA output vectors, we don't do any
     # transforms but model the data directly in the original
@@ -236,7 +239,7 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     Yproj = Projection(zeros(T, size(Y)[2], nY), zeros(T, nY), YSpec)
 
     for i in 1:nYCCA
-        FX, FY = CCA(X, Y; reg_Y = reg_CCA, reg_X = reg_CCA_X, nvecs = 1)
+        FX, FY = CCA(X, Y; reg_Y = reg_CCA, reg_X = T(1e-9), nvecs = 1)
 
         # Orthogonalize Y-vector
         yvec = GramSchmidt(FY.vectors[:,1], Yproj.vectors[:,1:i-1])
@@ -266,17 +269,19 @@ function dimreduce(X::AbstractMatrix{T}, Y::AbstractMatrix{T};
     end
 
     # Fill the rest of CCA X-dimensions and dummy X dimensions for all Y-vectors
-    Threads.@threads for i in 1:nY
+    # Threads.@threads
+    for i in 1:nY
         yproj_i = @views Y_unreduced * Yproj.vectors[:,i]
         if nXCCA > 0
-            get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA_X, reg_CCA_X,
+            # get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = T(1e-8), reg_CCA_X,
+            get_X_CCA_vectors!(X, yproj_i; nXCCA, reg_CCA = reg_CCA, reg_CCA_X,
                                X_basis = Xprojs[i].vectors, X_values = Xprojs[i].values)
         end
 
         if nXPCA > 0
             r = (nXCCA+1):(nXCCA+nXPCA)
 
-            # New behavior: XPCA and XCCA vectors are dependent
+            # New behavior: XPCA and XCCA vectors are linearly dependent
             (XPCvecs, XPCvals) = get_PCA_vectors(X, nXPCA)
 
             # Old behavior: XCCA and XPCA vectors are orthogonal
@@ -355,10 +360,13 @@ function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
         # end
 
         # Apparently because of regularization, and because of the
-        # recursion aboce, the CCA vectors may end up being
+        # recursion above, the CCA vectors may end up being
         # non-orthogonal. For this reason we force it to be orthogonal
         # by doing Gram-Schmidt with earlier vectors
-        X_basis[:,i] .= GramSchmidt(X_basis[:,i], X_basis[:,1:i-1])
+        X_basis[:,i] .= GramSchmidt(X_basis[:,i], X_basis[:,1:(i-1)])
+        # println("Orthogonality of X basis for CCA $i AFTER pruning")
+        # display(X_basis' * X_basis[:,i])
+
 
         # Update X to be orthogonal to all basis vectors up to now
         for ii in 1:i
@@ -376,6 +384,7 @@ function get_X_CCA_vectors!(X::AbstractMatrix{T}, yproj::AbstractVector{T};
         # X_values[i] = std(vXp)
         X_values[i] = std(vXprojs[:,i])
     end
+    # display(X_basis'*X_basis)
 end
 
 

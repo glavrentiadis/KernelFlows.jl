@@ -72,7 +72,7 @@ function MulticenterMinibatch(X::AbstractArray;
                               n::Int = n_default, niter::Int = 1000,
                               κ::Int = κ_default,
                               epoch_length::Int = 500,
-                              nnb::Int = min(3*n÷κ÷4, 2*size(X)[2]))
+                              nnb::Int = min(3*n÷κ÷4, 128))
 
     ndata = size(X)[1]
     all_centers = get_random_partitions(ndata, κ, niter)
