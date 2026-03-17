@@ -258,12 +258,12 @@ function ρ_RMSE(X::AbstractArray{T}, y::AbstractVector{T}, k::AnalyticKernel,
     extrabufs = [col for col in eachcol(k_Mbuf1)]
     hi = extrabufs[2]
 
-    Hyi = zeros(n)
-    Khi = zeros(n)
+    Hyi = zeros(T, n)
+    Khi = zeros(T, n)
 
     if return_components
-        allgrads = zeros(nα, length(s_LOO))
-        allpreds = zeros(length(s_LOO))
+        allgrads = zeros(T, (nα, length(s_LOO)))
+        allpreds = zeros(T, length(s_LOO))
     end
 
     for (k,i) in enumerate(s_LOO)
