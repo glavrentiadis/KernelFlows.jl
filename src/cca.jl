@@ -23,33 +23,28 @@ function CCA(X::Matrix{T}, Y::Matrix{T}; reg_Y::T = 1e-2, reg_X::T = reg_Y, maxd
     ndx = size(X)[2]
     s = randperm(size(X)[1])[1:ndata]
 
-    X = X[s,:]
-    Y = Y[s,:]
+    X = @views X[s,:]
+    Y = @views Y[s,:]
     (Xvecs, Xvals) = get_PCA_vectors(X, maxdata)
     (Yvecs, Yvals) = get_PCA_vectors(Y, maxdata)
 
     X = X * Xvecs
     Y = Y * Yvecs
 
-    H = hcat(X, Y)
-    C = cov(H)
+    # Precisions of X and Y covariances in the new diagonal bases
+    CxxI = Diagonal(one(T) ./ (var(X, dims = 1)[:] .+ reg_X))
+    CyyI = Diagonal(one(T) ./ (var(Y, dims = 1)[:] .+ reg_Y))
+    # CxxI = Diagonal(one(T) ./ (var(X, dims = 1)[:] .* (one(T) + reg_X)))
+    # CyyI = Diagonal(one(T) ./ (var(Y, dims = 1)[:] .* (one(T) + reg_Y)))
+    Cxy = cov(X,Y)
 
-    Cxx = @view C[1:ndx,1:ndx]
-    Cxy = @view C[ndx+1:end,1:ndx]
-    Cyy = @view C[ndx+1:end,ndx+1:end]
-
-    Cxx[diagind(Cxx)] .+= reg_X
-    Cyy[diagind(Cyy)] .+= reg_Y
-
-    CxxI = inv(Cxx)
-    CyyI = inv(Cyy)
-    R_X = CxxI * Cxy' * CyyI * Cxy
-
+    R_X = CxxI * Cxy * CyyI * Cxy'
     F_X = fasteigs(R_X, nvecs; force_real = true)
 
-    # No need to compute Y vectors to get 1-d subspace of 1-d space
+    # No need to compute Y vectors to get a 1-d subspace of a 1-d
+    # space
     if size(Y)[2] > 1
-        R_Y = CyyI * Cxy * CxxI * Cxy'
+        R_Y = CyyI * Cxy' * CxxI * Cxy
         F0_Y = fasteigs(R_Y, nvecs; force_real = true)
         F_Y = (vectors = Yvecs * F0_Y.vectors, values = F0_Y.values)
     else
