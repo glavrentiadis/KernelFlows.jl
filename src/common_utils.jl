@@ -29,8 +29,10 @@ nobs(H::Matrix) = size(H)[1]
 nobs(H::Vector{Matrix}) = size(H[1])[1]
 
 
-runningmedian(x, n) = [median(x[i:i+n]) for i ∈ 1:length(x)-n]
-RMSE(Y_true, Y_pred) = sqrt(sum((Y_true - Y_pred).^2)/size(Y_pred)[1])
+runningmedian(x::Vector, n) = [median(x[i:i+n]) for i ∈ 1:length(x)-n]
+runningmedian(M::Matrix, n) = hcat([median(M[:,i:i+n], dims = 2)[:] for i ∈ 1:size(M)[2]-n]...)
+runningmean(x::Vector, n) = [sum(x[i:i+n])/n for i ∈ 1:length(x)-n]
+RMSE(Y_true::AbstractArray{T}, Y_pred::AbstractArray{T}) where T = sqrt.(sum((Y_true - Y_pred).^2, dims = 1) ./ size(Y_pred)[1])
 
 
 "Splits integer range to as equal portions as possible, with number of
