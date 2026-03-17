@@ -453,6 +453,9 @@ function ρ_RMSE_no_LOO(X::AbstractArray{T}, y::AbstractVector{T},
     # reuse that for h below.
     Ktr = @views K[κ+1:end, κ+1:end]
     (Ktr, info) = LAPACK.potrf!('U', Ktr)
+    if info != 0
+        println("potrf! failed in ρ_RMSE_no_LOO. INFO: $info")
+    end
 
     gy = zeros(T, ntr)
     gy .= y[κ+1:n]
