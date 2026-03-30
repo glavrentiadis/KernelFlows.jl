@@ -21,16 +21,21 @@ using Makie
 function quantileplot!(p::Plots.Subplot, Y_te::AbstractMatrix{T}, Y_te_pred::AbstractMatrix{T};
                        x::AbstractArray = 1:size(Y_te)[2], μ = zeros(T, size(Y_te)[2])) where T <: Real
     Y_res = Y_te - Y_te_pred
-    qs = [.005, .025, .05, .25, .5, .75, .95, .975, .995]
-    colors = ["gray", "green", "blue", "red", "red", "blue", "green", "gray"]
-    labels = [nothing, nothing, nothing, nothing, "50%", "90%", "95%", "99%"]
+    qs = [.005, .025, .1, .25, .5, .75, .9, .975, .995]
+
+    cls = palette(:tab10) # color palette
+    c1 =  cls[4]; c2 = cls[3]; c3 = cls[1]; c4 = "gray"
+
+    colors = [c4, c3, c2, c1, c1, c2, c3, c4]
+    labels = [nothing, nothing, nothing, nothing, "50%", "80%", "95%", "99%"]
     quantiles = hcat([quantile(y, qs) for y ∈ eachcol(Y_res)]...) .+ μ'
 
     for (i,c) ∈ enumerate(colors[1:4])
+        al = 0.15*i
         Plots.plot!(p, x, quantiles[i,:], fillrange = quantiles[i+1,:],
-              color = c, alpha = .2, label = labels[i])
+              color = c, alpha = al, label = labels[9-i])
         Plots.plot!(p, x, quantiles[9-i+1,:], fillrange = quantiles[9-i,:],
-              color = c, alpha = .2, label = labels[i])
+              color = c, alpha = al, label = nothing)
     end
     Plots.plot!(p, xlims = extrema(x))
 
