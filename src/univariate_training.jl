@@ -236,12 +236,6 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
 
         ρval, ξgrad = ξ_and_∇ξ(k, local_Xbuf, ζ[s], O.x)
 
-        # In the event of NaNs we just skip this iteration
-        if isnan(sum(ξgrad))
-            nancount += 1
-            continue
-        end
-
         # Add regularization
         ρval += reg * sum(exp.(O.x))
         ξgrad[1:end-1] .+= reg * exp.(O.x[1:end-1])
@@ -255,6 +249,7 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
         # some training has been done to first find the overall scale
         # needed by the loss function.
         if i > offset_meangrad_start
+            # println("Adjusting meangrad...")
             meanξgrad = -sum(ξgrad) / nα
             ρval += meanξgrad * sum(exp.(O.x)) # reg
             ξgrad .+= meanξgrad # * exp.(O.x)
@@ -278,15 +273,30 @@ function flow(X::AbstractMatrix{T}, # all unscaled inputs (M.Z ./ M.λ')
         # display(gr)
         # display(gr_ref)
 
+        # In the event of NaNs we don't use data from this iteration
+        αval = exp.(O.x)
+        nan_in_gradient = isnan(sum(ξgrad))
+        nan_in_αval = isnan(sum(αval))
+        we_have_nans = (nan_in_gradient && nan_in_αval)
+        if we_have_nans
+            nancount += 1
+            println("nan_in_gradient: $nan_in_gradient")
+            println("nan_in_αval: $nan_in_αval")
+            ρval = NaN
+            αval = flowres.α_values[end][:]
+        end
+        # @assert !(isnan(sum(αval)))
+        # @assert !(isnan(ρval))
+
         flowres.ρ_values[i] = ρval
-        push!(flowres.α_values, exp.(O.x))
+        push!(flowres.α_values, αval)
     end
 
     if nancount > 0
-        println("\n\n#################################################")
-        println("$nancount gradient(s) out of $(B.niter) had NaNs!!!!")
-        println("Check that you don't have duplicate data points in \nyour training. You should also check if the added eps is \nsufficiently large for your dimension and floating point type \nin the function kernel_matrices.jl:sqr().")
-        println("############################################\n\n")
+        # println("\n\n#################################################")
+        println("##### $nancount gradient(s) out of $(B.niter) had NaNs! Be sure to not have duplicate data in your training set. #####")
+        # println("Check that you don't have duplicate data points in \nyour training. You should also check if the added eps is \nsufficiently large for your dimension and floating point type \nin the function kernel_matrices.jl:sqr().")
+        # println("############################################\n\n")
     end
 
     flowres
