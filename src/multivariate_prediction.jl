@@ -81,6 +81,9 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
         Hbufs = [zeros(T, (nXdims, nzxcols)) for _ in 1:nt]
     end
 
+    tasks_done = 0
+    ntasks = length(tasks)
+
     Threads.@threads for (i,batch_I) in tasks
         tid = Threads.threadid() % nt + 1
         bs = length(batch_I) # batch size
@@ -100,6 +103,13 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
         # Do the prediction in-place directly to outbuf
         @views predict(MVM.Ms[i], Z, pb; apply_λ, apply_zyinvtransf,
                        outbuf = ZY_pred[batch_I,i])
+
+        tasks_done += 1
+        if tid == 1
+            tdpct = round((100. * tasks_done / ntasks); sigdigits = 3)
+            print("$(tdpct)% of prediction chunks done\r")
+        end
+
     end
 
     return recover_outputs ? recover_Y(ZY_pred, G) : ZY_pred

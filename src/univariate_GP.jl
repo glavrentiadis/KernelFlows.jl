@@ -158,14 +158,15 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
 
     print("\rCompleted 0/$nM tasks...")
     if parallel
-        nt = min(Threads.nthreads(), length(Ms))
+        nt = min(Threads.nthreads(:default), length(Ms))
         bufs = u(ndata, nt)
         computed = zeros(Int, nt)
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
-            tid = Threads.threadid()
+            tid = Threads.threadid() % nt + 1
+            println(tid)
             update_GPModel!(M; buf = bufs[tid], update_K)
-            computed[Threads.threadid()] += 1
+            computed[tid] += 1
             print("\rCompleted $(sum(computed))/$nM tasks...")
         end
     else
