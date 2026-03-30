@@ -37,4 +37,5 @@ include("nonparametric_models.jl")
 
 include("common_utils.jl")
 
+include("uncertainty_model.jl")
 end # module KernelFlows

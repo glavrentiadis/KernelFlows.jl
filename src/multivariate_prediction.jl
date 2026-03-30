@@ -37,11 +37,14 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                  apply_zyinvtransf::Bool = true,
                  Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
 
+    G = MVM.G # shorthand
     (nte, nXdims) = size(X)
+    nXdims = size(G.Xprojs[1].vectors)[1] # needed for Xtransf_deg > 0
     nzycols = length(MVM.Ms)
+
     ZY_pred = zeros(T, (nte, nzycols))
 
-    nt = Threads.nthreads()
+    nt = Threads.nthreads(:default)
     ntr = length(MVM.Ms[1].h)
 
     # Predictive performance varies a lot according to maxalloc both
@@ -69,7 +72,7 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
     tasks = collect(Iterators.product(Mlist, batches))[:]
 
-    nzxcols = length(MVM.G.Xprojs[1].values)
+    nzxcols = length(G.Xprojs[1].values)
     bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols) for _ in 1:nt]
 
     if reduce_inputs
@@ -79,15 +82,18 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     end
 
     Threads.@threads for (i,batch_I) in tasks
-        tid = Threads.threadid()
+        tid = Threads.threadid() % nt + 1
         bs = length(batch_I) # batch size
 
         if bs == bufs[tid].nte
-            Z = @views reduce!(X[batch_I,:], MVM.G.Xprojs[i], MVM.G.μX, MVM.G.σX,
+            @views X_unreduced = G.Xtransfspec.deg == 0 ? X[batch_I,:] :
+                standard_transformations(X[batch_I,:], G.Xtransfspec)
+
+            Z = @views reduce!(X_unreduced, G.Xprojs[i], G.μX, G.σX,
                                Xbufs[tid], Hbufs[tid], Zbufs[tid]);
             pb = bufs[tid]
         else
-                Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], MVM.G, i)) : (@views X[batch_I, :])
+            Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], G, i)) : (@views X[batch_I, :])
             pb = PredictionBuffer(kernel, ntr, bs, nzxcols)
         end
 
@@ -96,7 +102,7 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                        outbuf = ZY_pred[batch_I,i])
     end
 
-    return recover_outputs ? recover_Y(ZY_pred, MVM.G) : ZY_pred
+    return recover_outputs ? recover_Y(ZY_pred, G) : ZY_pred
 end
 
 
