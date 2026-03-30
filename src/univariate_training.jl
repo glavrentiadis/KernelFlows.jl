@@ -151,7 +151,8 @@ function train!(Ms::Vector{GPModel{T}};
     # n comes from the minibatch object that has not been constructed
     # yet. The default n_default is set in minibatching.jl
     n = :n in keys(mbargs) ? mbargs[:n] : n_default
-    all_wbs = [get_wbs(Ms[1].kernel, n, nα) for _ in 1:Threads.nthreads()]
+    nt = Threads.nthreads(:default)
+    all_wbs = [get_wbs(Ms[1].kernel, n, nα) for _ in 1:nt]
     size_MB = total_wbsize_MB(all_wbs)
 
     println("Training $nM univariate GPs.")
@@ -162,10 +163,10 @@ function train!(Ms::Vector{GPModel{T}};
     print("\rCompleted 0/$nM tasks ")
 
     Threads.@threads :static for M in Ms
-        tid = Threads.threadid()
+        tid = Threads.threadid() % nt + 1
         train!(M; ρ, optalg, optargs, mbalg, mbargs, navg, update_K = false,
                wbs = all_wbs[tid], quiet, offset_meangrad_start)
-        computed[Threads.threadid()] += 1
+        computed[tid] += 1
         print("\rCompleted $(sum(computed))/$nM tasks...")
     end
     println("done!\n")
