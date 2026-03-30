@@ -80,8 +80,11 @@ end
 
 
 function default_reg(M::GPModel{T}) where T
-    l = length(M.ρ_values)
-    reg = l == 0 ? T(1e-2) : T(1e-2) * median(M.ρ_values[max(1, l - 99):end])
+    r = M.ρ_values # shorthand
+    r = r[r .!= 0] # NaNs may have been skipped...
+    r = r[(!).(isnan.(r))] # in case something really went wrong...
+    l = length(r)
+    reg = l == 0 ? T(1e-2) : T(1e-2) * median(r[max(1, l - 99):end])
 end
 
 
