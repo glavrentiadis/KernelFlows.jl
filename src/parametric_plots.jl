@@ -138,8 +138,9 @@ end
 using Makie
 
 function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::AbstractMatrix{T};
-                          diff = false, origspace = false, plot_dummyXdims::Bool = true,
+                          X_tr::Union{Nothing, AbstractMatrix{T}} = nothing,
                           Y_te_pred::Union{Nothing, AbstractMatrix{T}} = nothing,
+                          diff = false, origXspace = false, plot_dummyXdims::Bool = true,
                           Xtransfs = ones(Int, size(X_te)[2]), nYdims::Int = 0, nXdims::Int = 0, offset::Int = 0) where T <: Real
 
     # These are the same as in VSWIREmulator.jl
@@ -155,7 +156,7 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
 
     nY = size(ZY_te_pred)[2]
     nX = plot_dummyXdims ? length(MVM.G.Xprojs[1].spec.sparsedims) : MVM.G.Xprojs[1].spec.nCCA + MVM.G.Xprojs[1].spec.nPCA
-    nX = origspace ? size(X_te)[2] : nX
+    nX = origXspace ? size(X_te)[2] : nX
 
     nX = nXdims == 0 ? nX : min(nX, nXdims)
     nY = nYdims == 0 ? nY : min(nY, nYdims)
@@ -167,22 +168,41 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
     for i in offset + 1:offset + nY
         k = i - offset
         M = MVM.Ms[i]
-        ZX_te = origspace ? X_te : reduce_X(X_te, MVM.G, i)
+
+        # X training and testing labels
+        ZX_te = origXspace ? X_te : reduce_X(X_te, MVM.G, i)
+        if (diff || (X_tr == nothing))
+            ZX_tr = nothing
+        else
+            ZX_tr = origXspace ? X_tr : reduce_X(X_tr, MVM.G, i)
+            for j in 1:nX
+                Makie.scatter!(axes[j][k], ZX_tr[:,j], M.zyinvtransf.(M.ζ),
+                               color = :gray, alpha=.3, strokewidth = 1)
+            end
+        end
+
         for j in 1:nX
             print("\r$i, $j")
-            !diff && Makie.scatter!(axes[j][k], M.Z[:,j] / M.λ[j], M.zyinvtransf.(M.ζ), color = :gray, legend = false, alpha=.3, strokewidth = 1)
             pl!(axes[j][k], ZX_te[:,j], ZY_te[:,k], ZY_te_pred[:,k]; diff)
             if i - offset < nY
-                hidexdecorations!(axes[j][k], grid = false)
                 linkxaxes!(axes[j][k], axes[j][nY])
             end
-            if (j > 1) hideydecorations!(axes[j][k], grid = false)
+            if (j > 1)
                 linkyaxes!(axes[j][k], axes[1][k])
             end
         end
+
+        f.content[k].ylabel = "Output $i"
+
     end
 
-    t = diff ? "Prediction errors for test data" : "Predictions vs. truth"
+    for j in 1:nX
+        f.content[(j-1)*nY+1].title = "Input $j"
+    end
+
+    # add figure title
+    t = diff ? "Prediction errors over test data for each output dimension" : "Predictions vs. truth for each output dimension"
+    f[0,:] = Label(f, t)
     f
 end
 
