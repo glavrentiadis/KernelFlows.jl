@@ -458,7 +458,6 @@ function reduce_X(X::AbstractMatrix{T}, G::GPGeometry{T}, i::Int) where T <: Rea
     reduce(X, G.Xprojs[i], G.μX,  G.σX)
 end
 
-
 function reduce_Y(Y::AbstractMatrix{T}, G::GPGeometry{T}) where T <: Real
     reduce(Y, G.Yproj, G.μY,  G.σY)
 end
@@ -475,22 +474,6 @@ data are in rows."""
 function recover_y(z::AbstractVector{T}, G::GPGeometry{T}) where T <: Real
     recover_Y(reshape(z, (1, length(z))), G)[:]
 end
-
-
-# function reduce!(Z_out::AbstractMatrix{T}, X::AbstractMatrix{T}, X_tmp::AbstractMatrix{T},
-#                  H_tmp::AbstractMatrix{T}, P::Projection{T}, μ::Vector{T}, σ::Vector{T}) where T <: Real
-#     X_tmp .= X .- μ' # center
-#     X_tmp ./= σ' # scale
-#     H_tmp .= P.vectors ./ P.values'
-#     mul!(Z_out, X, H_tmp)
-# end
-
-
-# function reduce_X!(Z_out::AbstractMatrix{T}, X::AbstractMatrix{T},
-#                    X_tmp::AbstractMatrix{T}, H_tmp::AbstractMatrix{T},
-#                    G::GPGeometry{T}, i::Int) where T <: Real
-#     reduce!(Z_out, X, X_tmp, H_tmp, G.Xprojs[i], G.μX,  G.σX)
-# end
 
 
 # Not yet adapted to new dimension reduction code
