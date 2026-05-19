@@ -32,8 +32,9 @@ for k in 1:nY
     for j in 1:nX
         for i in 1:ndraws
             lab = i == 1 ? "samples (diff: should span zero)" : false
-            scatter!(p[k,j], X_te[1:nplotx,j], Y_te_pred[1:nplotx,k] - Y_te[1:nplotx,k] + draws[1:nplotx,k,i], color = "gray", alpha = 0.6, label = lab, xlabel = "Input $j", ylabel = "Output dim $k")
+            scatter!(p_nGUQ[k,j], X_te[1:nplotx,j], Y_te_pred[1:nplotx,k] - Y_te[1:nplotx,k] + draws[1:nplotx,k,i], color = "gray", alpha = 0.6, label = lab, xlabel = "Input $j", ylabel = "Output dim $k")
         end
+        hline!(p_nGUQ[k,j], [0,], color = "red", label = "Truth (difference = 0)")
     end
 end
-p
+p_nGUQ

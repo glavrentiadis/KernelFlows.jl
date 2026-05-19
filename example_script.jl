@@ -106,8 +106,8 @@ Y_te_pred = predict(MVM, X_te)
 # like
 
 using Plots
-Plots.scatter(Y_te_pred, Y_te, xlabel = "Predicted", ylabel = "True", aspect_ratio = :equal, xlim = (-12,12), ylim = (-12,12))
-Plots.plot!([-12,12], [-12,12], color = :red)
+p11 = Plots.scatter(Y_te_pred, Y_te, xlabel = "Predicted", ylabel = "True", aspect_ratio = :equal, xlim = (-12,12), ylim = (-12,12))
+Plots.plot!(p11, [-12,12], [-12,12], color = :red)
 # The scatter() function is available from both Makie and Plots
 # packages.
 
