@@ -56,7 +56,7 @@ function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:linear => linear,
              :linear_mean => linear_mean)
     if s  == :linear
-        θ₀list = [exp.([0., -7.]) for XP in G.Xprojs]
+        θ₀list = [exp.([-3., -7.]) for XP in G.Xprojs]
     elseif s == :linear_mean
         # get number of transformed X dims, plus nugget and weight
         nθs = [length(XP.spec.sparsedims) + 2 for XP in G.Xprojs]
@@ -70,7 +70,7 @@ end
 
 function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
     d = Dict(:Matern32_analytic => Matern32_αgrad!)
-    θ₀_U = T.(exp.([0., 0., 0., -7.]))
+    θ₀_U = T.(exp.([0., 0., -3., -7.]))
     return [AnalyticKernel(d[s], θ₀_U) for XP in G.Xprojs]
 end
 
