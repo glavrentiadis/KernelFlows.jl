@@ -64,7 +64,7 @@ end
 
 
 function posscale(X::AbstractMatrix{T}, spec::TransfSpec{T}) where T <: Real
-    Z = (X .- spec.minim') ./ spec.σ' * 5 .+ spec.ϵ
+    Z = (X .- spec.minim') ./ spec.σ' * T(5) .+ spec.ϵ
 end
 
 
