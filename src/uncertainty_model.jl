@@ -5,11 +5,20 @@ function recover_Y_tr(MVM::MVGPModel{T}) where T <: Real
 end
 
 
-struct KernelFlowsUncertaintyModel{T}
+struct NonGaussianUncertaintyModel{T} <: AbstractUncertaintyModel
     MVMD::MVGPModel{T} # GP model for variance prediction
-    PLMDY::Vector{KernelFlows.PiecewiseLinearMap{T}} # De-Gaussianization of predicted data
+    PLMDY::Vector{KernelFlows.PiecewiseLinearMap{T}} # Data for de-Gaussianising for sampling
     GD::KernelFlows.GPGeometry{T} # GPGeometry to reconstruct non-orthogonal data
-    P_nugget::Matrix{T} # nugget for the model
+    L_nugget::Matrix{T} # nugget for the model
+end
+
+
+abstract type AbstractUncertaintyResult end
+struct NonGaussianUncertaintyResult{T} <: AbstractUncertaintyResult
+    ZDstds::Matrix{T}
+    L_nugget::Matrix{T}
+    GD::GPGeometry{T}
+    PLMDY::Vector{PiecewiseLinearMap{T}}
 end
 
 
@@ -42,8 +51,9 @@ end
 
 function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::Matrix{T};
                                      k::Int = 2,
-                                     GD_kwargs::Dict,
-                                     GD2_kwargs::Dict) where T <: Real
+                                     GD_kwargs::Dict, # dimension reduction arguments for residual model
+                                     GD2_kwargs::Dict, # dimension reduction arguments for log variance model
+                                     ) where T <: Real
 
     Y_tr_pred = predict_training_kfold(MVM, X_tr, Y_tr; k)
 
@@ -68,7 +78,7 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
 
     # FIXME WRONG NAME!!! This is the square root of the covariance,
     # for drawing from the noise term
-    P_nugget = sqrt.(F.values[mpos])' .* F.vectors[:, mpos]
+    L_nugget = sqrt.(F.values[mpos])' .* F.vectors[:, mpos]
 
     # ZDY columns are independent. These are now the
     # variances. Columns are χ²-distributed
@@ -76,7 +86,6 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
 
     # Enforce positivity by going to log space
     ZDY2L_tr = log.(ZDY2_tr)
-
     GD2 = dimreduce(XD_tr, ZDY2L_tr; GD2_kwargs...)
 
     # This is the model for log variances
@@ -94,7 +103,7 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     set_parameters!(MVMD, allpars; update_K = false)
 
     # @time train!(MVMD; ρ = KernelFlows.ρ_RMSE_no_LOO, niter = 20000, n = 80, ϵ = 1f-3,
-    @time train!(MVMD; ρ = KernelFlows.ρ_RMSE, niter = 50000, n = 80, ϵ = 1f-2,
+    @time train!(MVMD; ρ = KernelFlows.ρ_RMSE, niter = 10000, n = 80, ϵ = 1f-2,
                  optalg = :SGD, mbalg = :multicenter, mbargs = Dict(:nnb => 10),
                  # optalg = :AMSGrad, mbalg = :randompartitions,
                  quiet = true, update_K = true)
@@ -118,20 +127,55 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     # FIXME: Parameterize how many bins are used for the PiecewiseLinearMaps
     PLMDY =  KernelFlows.PiecewiseLinearMaps(ZDYnor_tr; n = 300, mapping=:gaussian)
 
-    UQM = KernelFlowsUncertaintyModel(MVMD, PLMDY, GD, P_nugget)
-
+    UQM = NonGaussianUncertaintyModel(MVMD, PLMDY, GD, L_nugget)
 end
 
 
 # Convenience function to return standard deviations for X from a
-# KernelFlowsUncertaintyModel object, in the MVMD-transformed space
-function ZDstd(UQM::KernelFlowsUncertaintyModel{T}, X::Matrix{T}) where T <: Real
-    ZDstd = exp.(T(.5) * KernelFlows.predict(UQM.MVMD, X))
+# NonGaussianUncertaintyModel object, in the MVMD-transformed space
+function quantify_uncertainties(UQM::NonGaussianUncertaintyModel{T}, X::Matrix{T}) where T <: Real
+    ZDstds = exp.(T(.5) * KernelFlows.predict(UQM.MVMD, X))
+
+    NonGaussianUncertaintyResult(ZDstds, UQM.L_nugget, UQM.GD, UQM.PLMDY)
     # recover_Y(ZDvar, UQM.GD)
 end
 
 
-function sample_uqmodel(UQM::KernelFlowsUncertaintyModel{T}, x_te::Vector{T}; ndraws::Int = 30) where T <: Real
+function sample_uqmodel(UQR::NonGaussianUncertaintyResult{T}, ndraws::Int) where T <: Real
+
+    # Draw ndraws matrices to generate ndraws sets of samples
+    normals = [randn(T, (size(UQR.ZDstds))) for _ in 1:ndraws]
+
+    # Limit draws to the extent of training data used to construct
+    # PLMDY, meaning that we don't start fabricating rare events when
+    # we don't know how those would behave.
+    for (i,P) in enumerate(UQR.PLMDY)
+        lims = P.values[[2,end-1]]
+        for M in normals
+            @views clamp!(M[:,i], lims...)
+        end
+    end
+
+    PLMDY_draws = [UQR.ZDstds .* KernelFlows.tr_inv(UQR.PLMDY, M) for M in normals]
+    # PLMDY_draws .*= UQR.zdstds
+
+    draws = [recover_Y(pd, UQR.GD) for pd in PLMDY_draws]
+
+    (ndraws, nY) = size(draws[1]) # same for all D in draws
+    for D in draws
+        D .+= (UQR.L_nugget * randn(T, (nY, ndraws)))'
+        D .*= T(-1) # sign of the draws is inverted, so fix it
+    end
+
+
+    # draws += (UQR.L_nugget * randn(T, (nY, ndraws)))'
+
+    stack(draws)
+end
+
+
+"""Older implementation"""
+function sample_uqmodel(UQM::NonGaussianUncertaintyModel{T}, x_te::Vector{T}; ndraws::Int = 30) where T <: Real
     # Sampling amounts to just drawing from a Gaussian, getting the
     # standardized non-Gaussian residuals with PLMDY, scaling those with
     # MVMD-predicted stds, and then project back
@@ -165,7 +209,6 @@ function sample_uqmodel(UQM::KernelFlowsUncertaintyModel{T}, x_te::Vector{T}; nd
     # zDYG_te_pred = sqrt.(zDYG2_te_pred) # variance -> std
     # display(zDYG_te_pred)
 
-
     # zDYG_draws = normals .* zDYG_te_pred # draws from Gaussianized distribution
 
     # println("\n\nSTART")
@@ -183,13 +226,12 @@ function sample_uqmodel(UQM::KernelFlowsUncertaintyModel{T}, x_te::Vector{T}; nd
 
     uncs = recover_Y(zDY_draws, UQM.GD)
 
-    nY = size(UQM.P_nugget)[2]
+    nY = size(UQM.L_nugget)[2]
 
     # println(size(uncs))
-    uncs += (UQM.P_nugget * randn(T, (nY, ndraws)))'
+    uncs += (UQM.L_nugget * randn(T, (nY, ndraws)))'
 
     -uncs
-    # FIXME NUGGET STILL MISSING
 
     # Eigendecomposition is PDPᵀ, so we need square root. Compare to
     # drawing with Cholesky
