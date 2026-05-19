@@ -107,10 +107,11 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
         tasks_done += 1
         if tid == 1
             tdpct = round((100. * tasks_done / ntasks); sigdigits = 3)
-            print("$(tdpct)% of prediction chunks done\r")
+            print("$(tdpct)% of prediction chunks done   \r")
         end
 
     end
+    println("100% of prediction chunks done.")
 
     return recover_outputs ? recover_Y(ZY_pred, G) : ZY_pred
 end

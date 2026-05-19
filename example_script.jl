@@ -13,7 +13,15 @@ using KernelFlows
 # for instructions. I usually write a file for reproducibility, with
 # get_data() function. Something like
 
-X, Y = get_data()
+function get_data(n::Int)
+    f(x) = [x[1] + sin(x[2]), x[3] - x[2], x[1]*x[3]]
+    X = 2π*(rand(n, 3) .- .5)
+    Y = hcat([f(x) for x in eachrow(X)]...)'[:,:]
+    return X, Y
+end
+
+X, Y = get_data(5000)
+
 
 # Split it randomly to training and testing (if you did not do that
 # already) by using funtion split_data(). The nte is the number of
@@ -32,7 +40,7 @@ X_tr, Y_tr, X_te, Y_te = split_data(X, Y; nte = 500)
 # be higher-dimensional, and you might want to specify more than one Y
 # dimension. Each one of these becomes another scalar GP.
 
-G = dimreduce(X_tr, Y_tr, nYCCA = 1, nYPCA = 2, nXCCA = 2,
+G = dimreduce(X_tr, Y_tr, nYCCA = 0, nYPCA = 0, nXCCA = 1, nXPCA = 1,
               reg_CCA = 1e-1, reg_CCA_X = 1e0, maxdata = 3000,
               scale_Y = false, dummyXdims = true)
 
@@ -51,7 +59,7 @@ MVM = MVGPModel(X_tr, Y_tr, :Matern32_analytic, G; transform_zy = false)
 # overriding just the central parameters: number of iterations,
 # minibatch size, and learning rate. The call to traing looks like:
 
-train!(MVM; niter = 500, n = 128, ϵ = 1e-3)
+train!(MVM; niter = 5000, n = 128, ϵ = 1e-1)
 
 # This is enough in most settings. For more flexibility, there are two
 # different ways to construct minibatches (multi-center and random
@@ -60,8 +68,8 @@ train!(MVM; niter = 500, n = 128, ϵ = 1e-3)
 # type and size and number of iterations. For the optimizer what
 # matters most is the learning rate ϵ. We set those with
 
-optargs = Dict(:ϵ => 1e-3) # see optimizers.jl for details
-mbargs = Dict(:niter => 700, :n => 64, :epoch_length => 500) # minibatching.jl
+optargs = Dict(:ϵ => 1e-2) # see optimizers.jl for details
+mbargs = Dict(:niter => 5000, :n => 128, :epoch_length => 500) # minibatching.jl
 
 # and the function call to train the becomes
 
@@ -81,6 +89,9 @@ train!(MVM; ρ = ρ_RMSE, optalg = :AMSGrad, optargs, mbalg = :multicenter, mbar
 train!(MVM; ρ = ρ_RMSE, optalg = :AMSGrad, optargs,
        mbalg = :multicenter, mbargs, update_K = false)
 
+# after which one would need to do
+update_MVGPModel!(MVM)
+
 # You can look at how the scaling factors (λ), kernel parameters (θ),
 # and loss function values changed during training, with
 
@@ -94,11 +105,13 @@ Y_te_pred = predict(MVM, X_te)
 # data a good starting point is looking at the 1-1 plot by something
 # like
 
-scatter(Y_te_pred, Y_te)
-
+using Plots
+Plots.scatter(Y_te_pred, Y_te, xlabel = "Predicted", ylabel = "True", aspect_ratio = :equal, xlim = (-12,12), ylim = (-12,12))
+Plots.plot!([-12,12], [-12,12], color = :red)
 # The scatter() function is available from both Makie and Plots
 # packages.
 
 # There are some (somewhat immature) standard plotting functions
 # available in the parametric_plots.jl file. Some of the more useful
 # ones are matrixplot_preds, and plot_training.
+
