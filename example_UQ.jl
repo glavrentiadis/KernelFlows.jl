@@ -1,20 +1,22 @@
 include("example_script.jl")
 
 # For the residual model that is used under k-fold cross validation to
-# create training data for the log-variance model
-GD_kwargs = Dict(:nYCCA => 2, :nYPCA => 1, :nXCCA => 1, :nXPCA => 1,
+# create training data for the log-variance model. If nYCCA+nYPCA is
+# less than the dimension of the untransformed Y, the remaining
+# dimensions are going to be modeled with a nugget (in UQM.L_nugget
+# and UQR.L_nugget) that is not spatially variable. Note that if nYCCA
+# = nyPCA = 0, the uncertainty model will be learned in untransformed
+# coordinates.
+GD_kwargs = Dict(:nYCCA => 0, :nYPCA => 0, :nXCCA => 1, :nXPCA => 1,
                  :reg_CCA => 1e-1, :reg_CCA_X => 1e-1,
                  :maxdata => 3000, :scale_Y => true, :dummyXdims => true)
-
-# TRY ALSO WITH RANK-DEFICIENT GD AND CHECK THAT L_nugget has
-# reasonable numbers in it, not just epsilons. Also, L_nugget does not
-# need to be full rank, only rank full - r
 
 
 # For the log-variance model.
 GD2_kwargs = Dict(:nYCCA => 2, :nYPCA => 1, :nXCCA => 1, :nXPCA => 1,
                   :reg_CCA => 1e-1, :reg_CCA_X => 1e-1,
                   :maxdata => 3000, :scale_Y => true, :dummyXdims => true)
+
 
 UQM = KernelFlows.construct_uncertainty_model(MVM, X_tr, Y_tr; k = 2, GD_kwargs, GD2_kwargs)
 

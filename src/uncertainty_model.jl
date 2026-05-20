@@ -74,10 +74,13 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     # C_nugget is the covariance of output data not explicitly modeled.
     C_nugget = cov(YD_nullspaceproj)
     F = eigen(C_nugget)
-    mpos = F.values .> 0 # mask for positive eigenvalues
 
-    # FIXME WRONG NAME!!! This is the square root of the covariance,
-    # for drawing from the noise term
+    # Mask for truly positive eigenvalues. Discards dimensions where
+    # variation is close to machine epsilon.
+    mpos = F.values .> 1e-20
+
+    # This is the square root of the covariance, for drawing from the
+    # noise term. Not a cholesky factor, but from eigendecomposition.
     L_nugget = sqrt.(F.values[mpos])' .* F.vectors[:, mpos]
 
     # ZDY columns are independent. These are now the
@@ -157,13 +160,11 @@ function sample_uqmodel(UQR::NonGaussianUncertaintyResult{T}, ndraws::Int) where
     end
 
     PLMDY_draws = [UQR.ZDstds .* KernelFlows.tr_inv(UQR.PLMDY, M) for M in normals]
-    # PLMDY_draws .*= UQR.zdstds
-
     draws = [recover_Y(pd, UQR.GD) for pd in PLMDY_draws]
 
-    (ndraws, nY) = size(draws[1]) # same for all D in draws
+    nLvecs = size(UQR.L_nugget)[2]
     for D in draws
-        D .+= (UQR.L_nugget * randn(T, (nY, ndraws)))'
+        D .+= (UQR.L_nugget * randn(T, (nLvecs, ndraws)))'
         D .*= T(-1) # sign of the draws is inverted, so fix it
     end
 
