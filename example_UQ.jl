@@ -7,6 +7,11 @@ include("example_script.jl")
 # and UQR.L_nugget) that is not spatially variable. Note that if nYCCA
 # = nyPCA = 0, the uncertainty model will be learned in untransformed
 # coordinates.
+
+# For the standard posterior covariance model, use example_script.jl
+# and set uqmodel = :standard on the line where the MVGPModel object
+# MVM is constructed.
+
 GD_kwargs = Dict(:nYCCA => 0, :nYPCA => 0, :nXCCA => 1, :nXPCA => 1,
                  :reg_CCA => 1e-1, :reg_CCA_X => 1e-1,
                  :maxdata => 3000, :scale_Y => true, :dummyXdims => true)
@@ -40,3 +45,6 @@ for k in 1:nY
     end
 end
 p_nGUQ
+
+
+Plots.savefig(p_nGUQ, "p_nGUQ.pdf")

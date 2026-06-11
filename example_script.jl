@@ -13,6 +13,7 @@ using KernelFlows
 # for instructions. I usually write a file for reproducibility, with
 # get_data() function. Something like
 
+
 function get_data(n::Int)
     f(x) = [x[1] + sin(x[2]), x[3] - x[2], x[1]*x[3]]
     X = 2π*(rand(n, 3) .- .5)
@@ -21,7 +22,6 @@ function get_data(n::Int)
 end
 
 X, Y = get_data(5000)
-
 
 # Split it randomly to training and testing (if you did not do that
 # already) by using funtion split_data(). The nte is the number of
@@ -40,7 +40,7 @@ X_tr, Y_tr, X_te, Y_te = split_data(X, Y; nte = 500)
 # be higher-dimensional, and you might want to specify more than one Y
 # dimension. Each one of these becomes another scalar GP.
 
-G = dimreduce(X_tr, Y_tr, nYCCA = 0, nYPCA = 0, nXCCA = 1, nXPCA = 1,
+G = dimreduce(X_tr, Y_tr, nYCCA = 1, nYPCA = 1, nXCCA = 1, nXPCA = 1,
               reg_CCA = 1e-1, reg_CCA_X = 1e0, maxdata = 3000,
               scale_Y = false, dummyXdims = true)
 
@@ -49,7 +49,20 @@ G = dimreduce(X_tr, Y_tr, nYCCA = 0, nYPCA = 0, nXCCA = 1, nXPCA = 1,
 # also for constructing univariate models. The defaults here should
 # work fine.
 
-MVM = MVGPModel(X_tr, Y_tr, :Matern32_analytic, G; transform_zy = false)
+# If you want to quantify uncertainties using the integrated (standard
+# posterior covariance and its low-rank version), that needs to be set
+# up with the uqmodel argument. The non-Gaussian UQ is carried out
+# outside the MVGPModel object, see example_UQ.jl. The cost of doing
+# UQ is mostly memory-related: for high-dimensional models with lots
+# of training data the memory footprint becomes large, as the cholesky
+# factors of the kernel precision matrices need to be stored (uqmodel
+# = :standard). As a compromise, a low-rank version may work better
+# (uqmodel = :lowrank). To turn off integrated UQ modeling, use
+# uqmodel = :dummy, which is the default.
+
+uqmodel = :dummy
+MVM = MVGPModel(X_tr, Y_tr, :Matern32_analytic, G;
+                transform_zy = false, uqmodel)
 
 # We next need to learn the model (learn parameters). The default loss
 # is the L2 loss (ρ_RMSE), but there are many more available such as
@@ -99,7 +112,12 @@ plot_training(MVM)
 
 # Predicting is simple: With test data in X_te, one would predict with
 
-Y_te_pred = predict(MVM, X_te)
+(Y_te_pred, UQR) = predict(MVM, X_te; quantify_uncertainties = true)
+
+# The posterior means are now in Y_te_pred, and the UQ results are in
+# a model-specific struct UQR. The UQ part is reported as diagonals in
+# the transformed coordinates. In order to recover the posterior covariance, e.g. for the fifth test data point (in Y_te_pred[5,:]), one should do
+C_post = KernelFlows.recover_covariance(UQR, 5)
 
 # The results can be plotted using e.g. the Plots package. For scalar
 # data a good starting point is looking at the 1-1 plot by something
@@ -111,7 +129,6 @@ Plots.plot!(p11, [-12,12], [-12,12], color = :red)
 # The scatter() function is available from both Makie and Plots
 # packages.
 
-# There are some (somewhat immature) standard plotting functions
-# available in the parametric_plots.jl file. Some of the more useful
-# ones are matrixplot_preds, and plot_training.
-
+# There are some standard plotting functions available in the
+# parametric_plots.jl file. Some of the more useful ones are
+# matrixplot_preds, and plot_training.
