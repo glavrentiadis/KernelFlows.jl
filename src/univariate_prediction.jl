@@ -84,7 +84,7 @@ function predict(M::GPModel{T}, Z::AbstractMatrix{T}, pb::AbstractPredictionBuff
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
 
     # N.B. zyinvtransf is not applied to uqres! Use non-Gaussian UQ instead.
-    outbuf, uqres
+    return (outbuf, uqres)
 end
 
 

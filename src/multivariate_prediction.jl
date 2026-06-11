@@ -109,7 +109,7 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
             pb = PredictionBuffer(kernel, ntr, bs, nzxcols, nr)
         end
 
-        outbuf_uq = quantify_uncertainties ? uq_out[batch_I,i] : nothing
+        outbuf_uq = quantify_uncertainties ? (@views uq_out[batch_I,i]) : nothing
 
         # Do the prediction in-place directly to outbuf
         @views predict(MVM.Ms[i], Z, pb; apply_λ, apply_zyinvtransf,
