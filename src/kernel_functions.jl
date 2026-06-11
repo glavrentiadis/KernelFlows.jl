@@ -30,8 +30,9 @@ mutable struct BinaryKernel{T} <: AutodiffKernel
     θ_start::Vector{T}
 end
 
-"""Kernel to be used without autodiff"""
+"""Kernel to be used without autodiff. This is just Matern 3/2 for now"""
 mutable struct AnalyticKernel{T} <: Kernel
+    k::Function
     K_and_∂K∂logα!::Function # returns K and its gradients
     θ_start::Vector{T}
 end
@@ -69,9 +70,9 @@ function get_BinaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
 end
 
 function get_AnalyticKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
-    d = Dict(:Matern32_analytic => Matern32_αgrad!)
+    d = Dict(:Matern32_analytic => (Matern32, Matern32_αgrad!))
     θ₀_U = T.(exp.([0., 0., -3., -7.]))
-    return [AnalyticKernel(d[s], θ₀_U) for XP in G.Xprojs]
+    return [AnalyticKernel(d[s]..., θ₀_U) for XP in G.Xprojs]
 end
 
 function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real

@@ -13,11 +13,11 @@ using KernelFlows
 # for instructions. I usually write a file for reproducibility, with
 # get_data() function. Something like
 
-
 function get_data(n::Int)
     f(x) = [x[1] + sin(x[2]), x[3] - x[2], x[1]*x[3]]
     X = 2π*(rand(n, 3) .- .5)
     Y = hcat([f(x) for x in eachrow(X)]...)'[:,:]
+    Y += randn(size(Y)) .* [0.1, 0.2, 0.3]' # add noise
     return X, Y
 end
 
@@ -60,13 +60,17 @@ G = dimreduce(X_tr, Y_tr, nYCCA = 1, nYPCA = 1, nXCCA = 1, nXPCA = 1,
 # (uqmodel = :lowrank). To turn off integrated UQ modeling, use
 # uqmodel = :dummy, which is the default.
 
-uqmodel = :dummy
-MVM = MVGPModel(X_tr, Y_tr, :Matern32_analytic, G;
+uqmodel = :standard
+MVM = MVGPModel(X_tr, Y_tr, :Matern32, G;
                 transform_zy = false, uqmodel)
 
 # We next need to learn the model (learn parameters). The default loss
 # is the L2 loss (ρ_RMSE), but there are many more available such as
 # the Kernel Flows loss, ρ_KF.
+
+# For uqmodel = :standard, one should use ρ = ρ_MLE below along with
+# one of the AutodiffKernels, specifically :Matern32 instead of
+# :Matern32_analytic
 
 # The quick & dirty way of training the model uses the defaults, while
 # overriding just the central parameters: number of iterations,
@@ -86,7 +90,7 @@ mbargs = Dict(:niter => 5000, :n => 128, :epoch_length => 500) # minibatching.jl
 
 # and the function call to train the becomes
 
-train!(MVM; ρ = ρ_RMSE, optalg = :AMSGrad, optargs, mbalg = :multicenter, mbargs)
+train!(MVM; ρ = ρ_MLE, optalg = :AMSGrad, optargs, mbalg = :multicenter, mbargs)
 
 # Notice that in Julia you do not need to write optargs = optargs etc
 # - it is found automatically if a variable with that name is found in

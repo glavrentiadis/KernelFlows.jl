@@ -17,6 +17,9 @@
 export GPModel, update_GPModel!, update_parameters!
 
 
+# IntegratedUQModel definition needs to be before defining GPModel
+abstract type IntegratedUQModel end
+
 """Univariate GP model struct. This struct is sufficient for
 prediction of scalar zy at a new x, so that different zys can be
 combined to construct the original y."""
@@ -32,6 +35,7 @@ struct GPModel{T}
     ρ_values::Vector{T} # loss function values from latest training
     λ_training::Vector{Vector{T}} # scaling factors from training
     θ_training::Vector{Vector{T}} # kernel parameters from training
+    IUM::IntegratedUQModel # either low rank or full rank
 end
 
 
@@ -45,7 +49,9 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
                  kernel::Kernel;
                  λ::Union{Nothing, Vector{T}} = nothing,
                  θ::Union{Nothing, Vector{T}} = nothing,
-                 transform_zy::Bool = false) where T <: Real
+                 transform_zy::Bool = false,
+                 uqmodel::Symbol = :dummy,
+                 ) where T <: Real
 
     # Gaussianize 1-d labels if requested
     transform_zy || (zytransf = zyinvtransf = identity)
@@ -66,7 +72,18 @@ function GPModel(ZX_tr::Matrix{T}, # inputs after reduce()
 
     Z = ZX_tr .* λ'
 
-    return GPModel(ζ, h, Z, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[])
+    # Initialization of the UQ models
+    if uqmodel == :dummy
+        UQM = DummyUQModel()
+    elseif uqmodel == :standard
+        UQM = StandardUQModel(UpperTriangular(diagm(zeros(T, ntr))))
+    elseif uqmodel == :lowrank
+        error("NOT IMPLEMENTED")
+    else
+        error("Invalid integrated UQ model $uqmodel. Use one of :standard, :lowrank, or :dummy.")
+    end
+
+    return GPModel(ζ, h, Z, λ, θ, kernel, zytransf, zyinvtransf, T[], Vector{T}[], Vector{T}[], UQM)
 end
 
 """Updates parameters and M.Z for a GPModel M. The vector newpars
@@ -87,7 +104,8 @@ function update_GPModel!(M::GPModel{T};
                          newλ::Vector{<:Real} = default_λ(M),
                          newθ::Vector{<:Real} = default_θ(M),
                          buf::Union{Nothing, Matrix{T2}} = nothing,
-                         update_K::Bool = true) where {T<:Real,T2<:Real}
+                         update_K::Bool = true, # update M.h and M.IUM
+                         ) where {T<:Real,T2<:Real}
 
     # Update M.Z, M.λ, and M.θ, if requested
     if newλ != nothing
@@ -105,7 +123,7 @@ function update_GPModel!(M::GPModel{T};
     if update_K
         # Allocate buffers
         ntr = length(M.ζ)
-        H = Float32
+        H = T
         (buf == nothing) && (buf = zeros(H, (ntr, ntr)))
 
         # If buf1 of type T2 != T was given, we compute Cholesky with
@@ -121,8 +139,9 @@ function update_GPModel!(M::GPModel{T};
 
         a = one(H)
         b = H(1e-4)
+        nug = one(H)
         while info != 0
-            nug = one(H) + b
+            nug += b
             print("\npotrf! failed, INFO = $(info), recomputing with multiplicative nugget of $nug.")
             LinearAlgebra.copytri!(buf, 'L')
             buf[1:ntr+1:ntr^2] .= diagbuf .* nug
@@ -132,6 +151,9 @@ function update_GPModel!(M::GPModel{T};
 
         LAPACK.potrs!('U', buf, h) # solve h <- inv(K) * h
         M.h .= h # copy K⁻¹ζ where it belongs
+
+        # Always update UQ model when updating model
+        update_UQModel!(M.IUM, buf, diagbuf ./ nug)
     end
 
     M

@@ -15,18 +15,18 @@
 # Author: Jouni Susiluoto, jouni.i.susiluoto@jpl.nasa.gov
 #
 
-
 function PredictionBuffer(k::Union{AnalyticKernel{T}, UnaryKernel{T}},
-                          ntr::Int, nte::Int, ndim::Int) where T <: Real
+                          ntr::Int, nte::Int, ndim::Int, nr::Int) where T <: Real
 
-    StandardPredictionBuffer(zeros(T, (nte, ntr)), zeros(T, (nte, ntr)),
-                             zeros(T, (ntr, ndim)), zeros(T, (nte, ndim)),
-                             zeros(T, ntr), zeros(T, nte), nte)
+    StandardPredictionBuffer(zeros(T, (nte, ntr)), zeros(T, (nte, nr)),
+                             zeros(T, (nte, ntr)), zeros(T, (ntr, ndim)),
+                             zeros(T, (nte, ndim)), zeros(T, ntr),
+                             zeros(T, nte), nte)
 end
 
 
-function PredictionBuffer(k::Kernel, ntr::Int, nte::Int, ndim::Int)
-    FallbackPredictionBuffer(zeros(T, nte, ntr))
+function PredictionBuffer(k::Kernel, ntr::Int, nte::Int, ndim::Int, nr::Int)
+    FallbackPredictionBuffer(zeros(nte, ntr))
 end
 
 
@@ -35,19 +35,26 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
                  apply_λ::Bool = true,
                  recover_outputs::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 Mlist::AbstractVector{Int} = 1:length(MVM.Ms)) where T <: Real
+                 Mlist::AbstractVector{Int} = 1:length(MVM.Ms),
+                 quantify_uncertainties::Bool = false) where T <: Real
 
     G = MVM.G # shorthand
     (nte, nXdims) = size(X)
     nXdims = size(G.Xprojs[1].vectors)[1] # needed for Xtransf_deg > 0
     nzycols = length(MVM.Ms)
 
+    if typeof(MVM.Ms[1].IUM) == DummyUQModel
+        quantify_uncertainties = false
+    end
+
+
     ZY_pred = zeros(T, (nte, nzycols))
+    uq_out = quantify_uncertainties ? similar(ZY_pred) : nothing
 
     nt = Threads.nthreads(:default)
     ntr = length(MVM.Ms[1].h)
 
-    # Predictive performance varies a lot according to maxalloc both
+    # Prediction performance varies a lot according to maxalloc both
     # from processor to another and from application to another.
     # 2^26 seems to work fastest for 9900X, but 2^25 is safer for
     # systems with less cache
@@ -72,8 +79,10 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
 
     tasks = collect(Iterators.product(Mlist, batches))[:]
 
+    nr = C_rank(MVM.Ms[1].IUM) # Assume the same UQ model for all M in MVM.Ms
+
     nzxcols = length(G.Xprojs[1].values)
-    bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols) for _ in 1:nt]
+    bufs = [PredictionBuffer(kernel, ntr, chunksize, nzxcols, nr) for _ in 1:nt]
 
     if reduce_inputs
         Zbufs = [zeros(T, (chunksize, nzxcols)) for _ in 1:nt]
@@ -97,12 +106,16 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
             pb = bufs[tid]
         else
             Z = reduce_inputs ? (@views reduce_X(X[batch_I, :], G, i)) : (@views X[batch_I, :])
-            pb = PredictionBuffer(kernel, ntr, bs, nzxcols)
+            pb = PredictionBuffer(kernel, ntr, bs, nzxcols, nr)
         end
+
+        outbuf_uq = quantify_uncertainties ? uq_out[batch_I,i] : nothing
 
         # Do the prediction in-place directly to outbuf
         @views predict(MVM.Ms[i], Z, pb; apply_λ, apply_zyinvtransf,
-                       outbuf = ZY_pred[batch_I,i])
+                       outbuf = ZY_pred[batch_I,i],
+                       outbuf_uq,
+                       quantify_uncertainties)
 
         tasks_done += 1
         if tid == 1
@@ -113,7 +126,16 @@ function predict(MVM::MVGPModel{T}, X::AbstractMatrix{T};
     end
     println("100% of prediction chunks done.")
 
-    return recover_outputs ? recover_Y(ZY_pred, G) : ZY_pred
+    post_mean = recover_outputs ? recover_Y(ZY_pred, G) : ZY_pred
+
+    if quantify_uncertainties
+        post_unc = uqresult(MVM.Ms[1].IUM, uq_out, MVM.G.Yproj, MVM.G.σY)
+    else
+        post_unc = DummyUQResult()
+    end
+
+    return (post_mean, post_unc)
+
 end
 
 

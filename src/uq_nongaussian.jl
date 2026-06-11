@@ -5,7 +5,7 @@ function recover_Y_tr(MVM::MVGPModel{T}) where T <: Real
 end
 
 
-struct NonGaussianUncertaintyModel{T} <: AbstractUncertaintyModel
+struct NonGaussianUQModel{T} <: AbstractUQModel
     MVMD::MVGPModel{T} # GP model for variance prediction
     PLMDY::Vector{KernelFlows.PiecewiseLinearMap{T}} # Data for de-Gaussianising for sampling
     GD::KernelFlows.GPGeometry{T} # GPGeometry to reconstruct non-orthogonal data
@@ -13,8 +13,7 @@ struct NonGaussianUncertaintyModel{T} <: AbstractUncertaintyModel
 end
 
 
-abstract type AbstractUncertaintyResult end
-struct NonGaussianUncertaintyResult{T} <: AbstractUncertaintyResult
+struct NonGaussianUQResult{T} <: AbstractUQResult
     ZDstds::Matrix{T}
     L_nugget::Matrix{T}
     GD::GPGeometry{T}
@@ -130,21 +129,21 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     # FIXME: Parameterize how many bins are used for the PiecewiseLinearMaps
     PLMDY =  KernelFlows.PiecewiseLinearMaps(ZDYnor_tr; n = 300, mapping=:gaussian)
 
-    UQM = NonGaussianUncertaintyModel(MVMD, PLMDY, GD, L_nugget)
+    UQM = NonGaussianUQModel(MVMD, PLMDY, GD, L_nugget)
 end
 
 
 # Convenience function to return standard deviations for X from a
-# NonGaussianUncertaintyModel object, in the MVMD-transformed space
-function quantify_uncertainties(UQM::NonGaussianUncertaintyModel{T}, X::Matrix{T}) where T <: Real
+# NonGaussianUQModel object, in the MVMD-transformed space
+function uq(UQM::NonGaussianUQModel{T}, X::Matrix{T}) where T <: Real
     ZDstds = exp.(T(.5) * KernelFlows.predict(UQM.MVMD, X))
 
-    NonGaussianUncertaintyResult(ZDstds, UQM.L_nugget, UQM.GD, UQM.PLMDY)
+    NonGaussianUQResult(ZDstds, UQM.L_nugget, UQM.GD, UQM.PLMDY)
     # recover_Y(ZDvar, UQM.GD)
 end
 
 
-function sample_uqmodel(UQR::NonGaussianUncertaintyResult{T}, ndraws::Int) where T <: Real
+function sample_uqmodel(UQR::NonGaussianUQResult{T}, ndraws::Int) where T <: Real
 
     # Draw ndraws matrices to generate ndraws sets of samples
     normals = [randn(T, (size(UQR.ZDstds))) for _ in 1:ndraws]
@@ -176,7 +175,7 @@ end
 
 
 """Older implementation"""
-function sample_uqmodel(UQM::NonGaussianUncertaintyModel{T}, x_te::Vector{T}; ndraws::Int = 30) where T <: Real
+function sample_uqmodel(UQM::NonGaussianUQModel{T}, x_te::Vector{T}; ndraws::Int = 30) where T <: Real
     # Sampling amounts to just drawing from a Gaussian, getting the
     # standardized non-Gaussian residuals with PLMDY, scaling those with
     # MVMD-predicted stds, and then project back

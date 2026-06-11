@@ -96,11 +96,12 @@ end
 
 function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
                    Y_tr::Matrix{T},  # training outputs, data in rows
-                   kernels::Vector{H},   # same kernel for all GPModels
+                   kernels::Vector{H},   # different kernels
                    G::GPGeometry{T}; # input-output mapping geometry
                    Λ::Union{Nothing, Matrix{T}} = nothing, # scaling parameters inputs
                    Ψ::Union{Nothing, Matrix{T}} = nothing, # kernel paramaters θ
-                   transform_zy::Bool = false) where {T<:Real,H<:Kernel}
+                   transform_zy::Bool = false,
+                   uqmodel::Symbol = :dummy) where {T<:Real,H<:Kernel}
 
     ZY_tr = reduce_Y(Y_tr, G)
     nZYdims = size(ZY_tr)[2]
@@ -111,7 +112,7 @@ function MVGPModel(X_tr::Matrix{T},  # training inputs, with data in rows
     θs = (Ψ == nothing) ? [nothing for _ ∈ 1:nZYdims] : ve(Ψ)
 
     Ms = [GPModel(reduce_X(X_tr, G, i), ZY_tr[:,i], kernels[i];
-                  λ = λs[i], θ = θs[i], transform_zy) for i ∈ 1:nZYdims]
+                  λ = λs[i], θ = θs[i], transform_zy, uqmodel) for i ∈ 1:nZYdims]
 
     return MVGPModel(Ms, G)
 end

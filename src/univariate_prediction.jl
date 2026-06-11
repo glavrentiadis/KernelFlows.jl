@@ -24,6 +24,7 @@ abstract type AbstractPredictionBuffer{T} end
 
 struct StandardPredictionBuffer{T} <: AbstractPredictionBuffer{T}
     M_cross::Matrix{T} # cross covariance matrix storage
+    M_uqprod::Matrix{T} # matrix for computing uncertainties
     M_lin::Matrix{T} # linear part storage
     M_Xtr::Matrix{T} # X1 squared
     M_Xte::Matrix{T} # X2 squared
@@ -31,6 +32,7 @@ struct StandardPredictionBuffer{T} <: AbstractPredictionBuffer{T}
     v_nte::Vector{T}
     nte::Int # prediction batch size
 end
+
 
 struct FallbackPredictionBuffer{T} <: AbstractPredictionBuffer{T}
     M_cross::Matrix{T} # cross covariance matrix storage
@@ -43,33 +45,57 @@ function zero!(pb::StandardPredictionBuffer{T}) where T <: Real
     pb.M_Xtr .= zero(T)
     pb.M_Xte .= zero(T)
     pb.M_lin .= zero(T)
-    pb.M_cross .= zero(T)
+    pb.M_uqprod .= zero(T)
 end
 
 
 """GP prediction with Model (univariate output). By default M.λ will
 be applied, namely,
 
-   X = M.λ' * X
+   Z = M.λ' * Z
 
 This can be overruled by setting apply_λ to false. Note that in this
-function X needs to be given in reduced coordinates.
+function inputs (Z) need to be given in reduced coordinates.
 """
-function predict(M::GPModel{T}, X::AbstractMatrix{T}, pb::AbstractPredictionBuffer{T};
+function predict(M::GPModel{T}, Z::AbstractMatrix{T}, pb::AbstractPredictionBuffer{T};
                  apply_λ::Bool = true,
                  apply_zyinvtransf::Bool = true,
-                 outbuf::Union{Nothing, AbstractVector{T}} = nothing) where T <: Real
+                 outbuf::Union{Nothing, AbstractVector{T}} = nothing,
+                 outbuf_uq::Union{Nothing, AbstractVector{T}} = nothing,
+                 quantify_uncertainties::Bool = false) where T <: Real
 
-    apply_λ && (X .*= M.λ')
+    apply_λ && (Z .*= M.λ')
 
     # Allocate if buffers not given
     (outbuf == nothing) && (outbuf = zeros(T, size(X)[1]))
+    ((outbuf_uq == nothing) && (quantify_uncertainties)) && (outbuf_uq = zeros(T, size(X)[1]))
 
-    cross_covariance_matrix!(M.kernel, M.θ, X, M.Z, pb)
+    cross_covariance_matrix!(M.kernel, M.θ, Z, M.Z, pb)
     mul!(outbuf, pb.M_cross, M.h)
 
+    # UQ portion
+    if quantify_uncertainties
+        h = marginal_variance(M, Z)
+        uqres = uq!(M.IUM, pb, h, outbuf_uq) #pb.M_cross, h, pb.M_uqprod)
+    else
+        uqres = DummyUQResult()
+    end
+
     apply_zyinvtransf && (outbuf .= M.zyinvtransf.(outbuf))
-    outbuf
+
+    # N.B. zyinvtransf is not applied to uqres! Use non-Gaussian UQ instead.
+    outbuf, uqres
+end
+
+
+function marginal_variance(M::GPModel{T}, Z::AbstractMatrix{T}) where T <: Real
+    nte = size(Z)[1]
+    h = zeros(T, size(Z)[1])
+    h .= exp(T(-12)) + M.θ[4] + M.kernel.k(zero(T), M.θ[1], M.θ[2])
+    for i in 1:nte
+        h[i] += @views M.θ[3] * dot(Z[i,:], Z[i,:])
+    end
+    h
 end
 
 
