@@ -10,6 +10,7 @@ struct NonGaussianUQModel{T} <: AbstractUQModel
     PLMDY::Vector{KernelFlows.PiecewiseLinearMap{T}} # Data for de-Gaussianising for sampling
     GD::KernelFlows.GPGeometry{T} # GPGeometry to reconstruct non-orthogonal data
     L_nugget::Matrix{T} # nugget for the model
+    logvar_offsets::Vector{T} # For getting the regression to the mean-behavior right
 end
 
 
@@ -41,7 +42,8 @@ function predict_training_kfold(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::Matrix
         MVMk = MVGPModel(X_tr_k, Y_tr_k, :Matern32, MVM.G)
         allpars = get_parameters(MVM)
         set_parameters!(MVMk, allpars; update_K = true)
-        Y_tr_pred[ste,:] .= KernelFlows.predict(MVMk, X_te_k)
+        (tmp, _UQR) = KernelFlows.predict(MVMk, X_te_k; quantify_uncertainties = false)
+        Y_tr_pred[ste,:] .= tmp
     end
 
     Y_tr_pred
@@ -90,9 +92,8 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     ZDY2L_tr = log.(ZDY2_tr)
     GD2 = dimreduce(XD_tr, ZDY2L_tr; GD2_kwargs...)
 
-    # This is the model for log variances
-    # MVMD = MVGPModel(XD_tr, ZDY2L_tr, :spherical_sqexp, GD2);
-    MVMD = MVGPModel(XD_tr, ZDY2L_tr, :Matern32, GD2);
+    # This is the model for plain log variances to get scaling factors.
+    MVMD = MVGPModel(XD_tr, ZDY2L_tr, :spherical_sqexp, GD2);
     allpars = get_parameters(MVMD)
 
     # Set large nugget as we must not interpolate exactly, just find
@@ -116,6 +117,22 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     # we do the k-fold prediction here as well.
     ZDY2L_tr_pred = predict_training_kfold(MVMD, XD_tr, ZDY2L_tr; k)
 
+    # Re-construct the MVMD using cross-validated prediction residuals
+    # with mean max variance, instead of zero.
+    logvar_offsets = maximum(ZDY2L_tr_pred, dims = 1)[:]
+    ZDY2L_tr_pred_meanfix = - (ZDY2L_tr_pred .- logvar_offsets')
+
+    MVMD_kfold = MVGPModel(XD_tr, ZDY2L_tr_pred_meanfix, :spherical_sqexp, GD2);
+    allpars = get_parameters(MVMD_kfold)
+    allpars[end,:] .= T(1f-1) # nugget
+    allpars[end-1,:] .= T(1f-9) # linear
+    set_parameters!(MVMD_kfold, allpars; update_K = false)
+    @time train!(MVMD_kfold; ρ = KernelFlows.ρ_RMSE, niter = 5000, n = 80, ϵ = 1f-2,
+                 optalg = :SGD, mbalg = :multicenter, mbargs = Dict(:nnb => 10),
+                 quiet = true, update_K = true)
+
+
+    # Construct PLMDY by scaling residuals
     ZDYscales_tr = exp.(5f-1 * ZDY2L_tr_pred) # 0.5 is the square root
 
     # Absolute residuals with unit standard deviation. The
@@ -129,14 +146,15 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     # FIXME: Parameterize how many bins are used for the PiecewiseLinearMaps
     PLMDY =  KernelFlows.PiecewiseLinearMaps(ZDYnor_tr; n = 300, mapping=:gaussian)
 
-    UQM = NonGaussianUQModel(MVMD, PLMDY, GD, L_nugget)
+    UQM = NonGaussianUQModel(MVMD_kfold, PLMDY, GD, L_nugget, logvar_offsets)
 end
 
 
 # Convenience function to return standard deviations for X from a
 # NonGaussianUQModel object, in the MVMD-transformed space
 function uq(UQM::NonGaussianUQModel{T}, X::Matrix{T}) where T <: Real
-    ZDstds = exp.(T(.5) * KernelFlows.predict(UQM.MVMD, X))
+    preds = -KernelFlows.predict(UQM.MVMD, X)[1] .+ UQM.logvar_offsets'
+    ZDstds = exp.(T(.5) * preds)
 
     NonGaussianUQResult(ZDstds, UQM.L_nugget, UQM.GD, UQM.PLMDY)
     # recover_Y(ZDvar, UQM.GD)
