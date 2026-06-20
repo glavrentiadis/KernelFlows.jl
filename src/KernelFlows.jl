@@ -40,4 +40,6 @@ include("common_utils.jl")
 include("conditional_variance.jl")
 include("uq.jl")
 
+include("parametric_IO.jl")
+
 end # module KernelFlows

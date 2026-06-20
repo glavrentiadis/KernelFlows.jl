@@ -37,6 +37,5 @@ include("multivariate_GP.jl")
 include("multilevel_GP.jl")
 include("mean_functions.jl")
 
-include("parametric_IO.jl")
 include("parametric_plots.jl")
 

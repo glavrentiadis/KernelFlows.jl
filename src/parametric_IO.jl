@@ -101,6 +101,42 @@ function load_kernel(G::JLD2.Group)
 end
 
 
+function save_IUM(U::DummyUQModel, G::JLD2.Group)
+    G["uqtype"] = "DummyUQModel"
+end
+
+function save_IUM(U::StandardUQModel, G::JLD2.Group)
+    G["LI"] = Matrix(U.LI)
+    G["uqtype"] = "StandardUQModel"
+end
+
+
+function load_standard_uqmodel(G::JLD2.Group)
+    StandardUQModel(UpperTriangular(G["LI"]))
+end
+
+
+function load_dummy_uqmodel(G::JLD2.Group)
+    DummyUQModel()
+end
+
+
+"""Load IntegratedUQModel from a JLD2.Group. Defaults to DummyUQModel
+for loading legacy emulators that predate integrated UQ."""
+function load_IUM(G::JLD2.Group)
+    # Default to DummyUQModel for loading legacy emulators
+    ut = "uqtype" in keys(G) ? G["uqtype"] : "DummyUQModel"
+
+    if ut == "StandardUQModel"
+        U = load_standard_uqmodel(G)
+    elseif ut == "DummyUQModel"
+        U = load_dummy_uqmodel(G)
+    end
+
+    U
+end
+
+
 """Saves a GPModel as a group in a JLD2 file"""
 function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["zeta"] = M.ζ
@@ -113,6 +149,8 @@ function save_GPModel(M::GPModel{T}, G::JLD2.Group) where T <: Real
     G["theta_training"] = hcat(M.θ_training...)
     g = JLD2.Group(G, "kernel")
     save_kernel(M.kernel, G["kernel"])
+    g = JLD2.Group(G, "IUM")
+    save_IUM(M.IUM, G["IUM"])
 end
 
 
@@ -124,10 +162,14 @@ function load_GPModel(G::JLD2.Group)
     θ = G["theta"]
     ρ_values = G["rho_values"]
     kernel = load_kernel(G["kernel"])
-    λ_training = [c[:] for c in collect(eachcol(G["lambda_training"]))]
-    θ_training = [c[:] for c in eachcol(G["theta_training"])]
+    # Pin the element type so empty training histories (e.g. untrained
+    # or trimmed models) reconstruct as Vector{Vector{T}}, not Vector{Vector{Any}}.
+    T = eltype(λ)
+    λ_training = Vector{T}[c[:] for c in eachcol(G["lambda_training"])]
+    θ_training = Vector{T}[c[:] for c in eachcol(G["theta_training"])]
+    IUM = "IUM" in keys(G) ? load_IUM(G["IUM"]) : DummyUQModel()
 
-    GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values, λ_training, θ_training)
+    GPModel(ζ, h, Z, λ, θ, kernel, identity, identity, ρ_values, λ_training, θ_training, IUM)
 end
 
 
@@ -229,7 +271,9 @@ function load_MVGPModel(G::JLD2.Group)
 
     geom = load_GPGeometry(G["G"])
     Ms = Vector{GPModel{eltype(geom.μX)}}()
-    nM = length(keys(G)) - 1 # number of GPModels in MVGPModel
+    # Count only the "M<i>" GPModel groups; ignore "G" and any JLD2
+    # internal groups such as "_types".
+    nM = count(k -> occursin(r"^M\d+$", k), keys(G))
 
     for i in 1:nM
         push!(Ms, load_GPModel(G["M" * string(i)]))
