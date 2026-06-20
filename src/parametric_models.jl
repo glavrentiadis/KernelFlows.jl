@@ -27,6 +27,7 @@ using Plots
 using Statistics
 using Measures
 using Polynomials
+using OhMyThreads
 
 include("optimizers.jl")
 include("minibatching.jl")

@@ -169,38 +169,31 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
 
     nM = length(Ms)
     ndata = length(Ms[1].ζ)
-    parallel = ndata < 20001
+    max_nt = floor(Int, (Sys.free_memory() * 0.9 / sizeof(T)) / ndata^2)
+    nt = min(Threads.nthreads(), max_nt, length(Ms))
 
-    txt1 = parallel ? "in parallel" : "serially"
-    txt2 = update_K ? "Also updates" : "Skip updating"
-    println("Updating $(length(Ms)) GPs in $txt1. $txt2 K⁻¹y in M.h.")
+    txt1 = update_K ? "Also updates" : "Skip updating"
+    println("Updating $(length(Ms)) GPs with $nt threads. $txt1 K⁻¹y in M.h.")
 
     # Helper function for getting buffers
     u(nd, nt) = [zeros(T, (nd, nd)) for _ in 1:nt]
 
     print("\rCompleted 0/$nM tasks...")
-    if parallel
-        nt = min(Threads.nthreads(:default), length(Ms))
-        bufs = u(ndata, nt)
-        computed = zeros(Int, nt)
 
-        Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
-            tid = Threads.threadid() % nt + 1
-            update_GPModel!(M; buf = bufs[tid], update_K)
-            computed[tid] += 1
-            print("\rCompleted $(sum(computed))/$nM tasks...")
-        end
-    else
-        buf = zeros(T, (ndata, ndata))
-        for (i,M) ∈ collect(enumerate(Ms))
-            update_GPModel!(M; update_K, buf)
-            print("\rCompleted $i/$nM tasks...")
-    end
+    # Counter for tracking progress
+    computed = Base.Threads.Atomic{Int}(0)
+
+    @tasks for t in collect(enumerate(Ms))
+        @set ntasks = nt
+        (i,M) = t
+        @local buf = zeros(T, ndata, ndata)
+        update_GPModel!(M; buf = buf, update_K)
+        Base.Threads.atomic_add!(computed, 1)
+        print("\rFinished $(computed[]) / $nM tasks...")
     end
     println("done!")
     Ms
 end
-
 
 
 """Convenience function to obtain logα from a GPModel{T}"""
