@@ -47,7 +47,8 @@ function get_UnaryKernel(s::Symbol, G::GPGeometry{T}) where T <: Real
              :spherical_exp => spherical_exp,
              :inverse_quadratic => inverse_quadratic,
              :Matern32 => Matern32,
-             :Matern52 => Matern52)
+             :Matern52 => Matern52,
+             :zerokernel => zerokernel)
     # Initial θ for UnaryKernels
     θ₀_U = T.(exp.([0., 0., -3., -3.]))
     return [UnaryKernel(d[s], θ₀_U, length(XP.values)) for XP in G.Xprojs]
@@ -78,7 +79,8 @@ end
 function get_MVGP_kernels(s::Symbol, G::GPGeometry{T}) where T <: Real
 
     unary_kernels = [:spherical_sqexp, :spherical_exp,
-                     :Matern32, :Matern52, :inverse_quadratic]
+                     :Matern32, :Matern52, :inverse_quadratic,
+                     :zerokernel]
     binary_kernels = [:linear, :linear_mean]
     analytic_kernels = [:Matern32_analytic]
 

@@ -45,3 +45,8 @@ function inverse_quadratic(d::T, a::T, b::T) where T <: Real
     a / sqrt(d^2 + b)
 end
 inverse_quadratic(d::T; θ::AbstractVector{T}) where T <: Real = inverse_quadratic(d, θ[1], θ[2])
+
+function zerokernel(d::T, a::T, b::T) where T <: Real
+    zero(T)
+end
+zerokernel(d::T; θ::AbstractVector{T}) where T <: Real = zerokernel(d, θ[1], θ[2])

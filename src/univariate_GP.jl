@@ -186,7 +186,6 @@ function update_GPModel!(Ms::Vector{GPModel{T}}; update_K::Bool = true) where T 
 
         Threads.@threads :static for (i,M) ∈ collect(enumerate(Ms))
             tid = Threads.threadid() % nt + 1
-            println(tid)
             update_GPModel!(M; buf = bufs[tid], update_K)
             computed[tid] += 1
             print("\rCompleted $(sum(computed))/$nM tasks...")
