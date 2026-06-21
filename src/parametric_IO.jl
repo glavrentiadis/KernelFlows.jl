@@ -47,6 +47,7 @@ function save_kernel(U::UnaryKernel, G::JLD2.Group)
 end
 
 function save_kernel(U::AnalyticKernel, G::JLD2.Group)
+    G["k"] = string(U.k)
     G["K_and_∂K∂logα!"] = string(U.K_and_∂K∂logα!)
     G["theta_start"] = U.θ_start
     G["kerneltype"] = "AnalyticKernel"
@@ -54,9 +55,10 @@ end
 
 
 function load_analytic_kernel(G::JLD2.Group, kerneltable::Dict)
-    k = kerneltable[G["K_and_∂K∂logα!"]]
+    k = kerneltable[G["k"]]
+    K_and_diff = kerneltable[G["K_and_∂K∂logα!"]]
     θ_start = G["theta_start"]
-    AnalyticKernel(k, θ_start)
+    AnalyticKernel(k, K_and_diff, θ_start)
 end
 
 
