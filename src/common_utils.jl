@@ -23,8 +23,6 @@ using Statistics
 using Distances
 
 
-
-
 nobs(H::Matrix) = size(H)[1]
 nobs(H::Vector{Matrix}) = size(H[1])[1]
 
@@ -168,6 +166,19 @@ function print_parameters(Ms::Vector{GPModel{T}}) where T <: Real
 end
 
 
+"""Return the column-wise minima and maxima of one or more matrices""" 
+function commonextrema(Ys...)
+    ex = vcat([extrema(Y, dims = 1) for Y in Ys]...)
+    t1(t) = t[1]
+    t2(t) = t[2]
+    mins = minimum(t1.(ex), dims = 1)[:]
+    maxes = maximum(t2.(ex), dims = 1)[:]
+
+    return (mins, maxes)
+end
+
+
+"""This is the so-called pizza algorithm"""
 function rebalance_data(X::AbstractMatrix{T}, nleave::Int, MVM::MVGPModel{T};
                         ydims::AbstractVector{Int} = 1:length(MVM.Ms),
                         nXlinear::Union{Int, Nothing} = nothing) where T <: Real

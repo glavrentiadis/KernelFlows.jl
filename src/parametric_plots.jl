@@ -207,16 +207,21 @@ function matrixplot_preds(MVM::MVGPModel{T}, X_te::AbstractMatrix{T}, Y_te::Abst
 end
 
 
-function plot_11(Y_te, Y_te_pred1, Y_te_pred2)
+function plot_11(Y_te::Matrix{T}, Y_te_preds...) where T <: Real
     nvecs = size(Y_te)[2]
-    p = plot(layout = nvecs, size = (1920,1200))
+    p = Plots.plot(layout = nvecs, size = (1920,1200))
+
+    (mins, maxes) = commonextrema(Y_te, Y_te_preds...)
+
     for i in 1:nvecs
-        scatter!(p[i], Y_te[:,i], Y_te_pred1[:,i])
-        scatter!(p[i], Y_te[:,i], Y_te_pred2[:,i])
+        for Y_te_pred in Y_te_preds
+            Plots.scatter!(p[i], Y_te[:,i], Y_te_pred[:,i])
+        end
     end
 
     for i in 1:nvecs
-        plot!(p[i], [-2,8], [-2,8], color="red")
+        (a,b) = (mins[i], maxes[i])
+        Plots.plot!(p[i], [a,b], [a,b], color="red")
     end
     p
 end
