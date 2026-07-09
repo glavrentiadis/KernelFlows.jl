@@ -6,60 +6,16 @@ abstract type AbstractOptimizer end
 # any optimizer, returning the updated parameters. For all algorithms,
 # the learning rate (step size) should be called ϵ.
 
-
-mutable struct AMSGrad{T} <: AbstractOptimizer
-    # const for safety: minibatching with MultiCenterMinibatch
-    # requires persistent pointers, so we make sure we don't change
-    # that.
-    const x::Vector{T}
-    m::Vector{T}
-    v::T
-    vhat::T
-    ϵ::T # learning rate, α in AMSGrad paper
-    β1::T
-    β2::T
-    δ::T # regularization, ϵ in AMSGrad paper
-end
-
-
-function iterate!(O::AMSGrad{T}, g::AbstractVector{T}) where T <: Real
-    O.m = O.β1 * O.m + (one(T) - O.β1) * g
-    O.v = O.β2 * O.v + (one(T) - O.β2) * dot(g,g) # g.^2
-    O.vhat = max(O.vhat, O.v)
-    O.x .-= O.ϵ .* O.m / (sqrt(O.vhat) + O.δ)
-end
-
-
-# Standard initializer
-function AMSGrad(x_start::Vector{T};
-                 ϵ::T = T(1e-3), β1::T = T(.9), β2::T = T(.999),
-                 δ::T = T(1e-8)) where T <: Real
-    AMSGrad(x_start, zero(x_start), T(0), T(0), ϵ, β1, β2, δ)
-end
-
-
-struct SGD{T} <: AbstractOptimizer
-    x::Vector{T}
-    ϵ::T # learning rate
-    fixed::Bool # if true, all steps are of length ϵ
-end
-
-
-function iterate!(O::SGD, g::AbstractVector{T}) where T <: Real
-    α = O.fixed ? sqrt(sum(g.^2) + T(1e-9)) : one(T)
-    O.x .-= O.ϵ / α * g
-end
-
-
-function SGD(x_start::Vector{T}; ϵ::T = 1e-3, fixed::Bool = true) where T <: Real
-    SGD(x_start, ϵ, fixed)
-end
+include("opt_SGD.jl")
+include("opt_AMSGrad.jl")
+include("opt_InertialSGD.jl")
 
 
 function get_optimizer(optalg::Symbol, x_start::Vector{T};
                        optargs::Dict{Symbol,H} = Dict{Symbol,Any}()) where {T<:Real, H<:Any}
     optalg == :AMSGrad && (return AMSGrad(x_start; optargs...))
     optalg == :SGD && (return SGD(x_start; optargs...))
+    optalg == :InertialSGD && (return InertialSGD(x_start; optargs...))
 end
 
 

@@ -76,7 +76,7 @@ MVM = MVGPModel(X_tr, Y_tr, :Matern32, G;
 # overriding just the central parameters: number of iterations,
 # minibatch size, and learning rate. The call to traing looks like:
 
-train!(MVM; niter = 5000, n = 128, ϵ = 1e-1)
+train!(MVM; niter = 1000, n = 64, ϵ = 1e-2)
 
 # This is enough in most settings. For more flexibility, there are two
 # different ways to construct minibatches (multi-center and random
@@ -86,7 +86,7 @@ train!(MVM; niter = 5000, n = 128, ϵ = 1e-1)
 # matters most is the learning rate ϵ. We set those with
 
 optargs = Dict(:ϵ => 1e-2) # see optimizers.jl for details
-mbargs = Dict(:niter => 5000, :n => 128, :epoch_length => 500) # minibatching.jl
+mbargs = Dict(:niter => 1000, :n => 64, :epoch_length => 500) # minibatching.jl
 
 # and the function call to train the becomes
 
