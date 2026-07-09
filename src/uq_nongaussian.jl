@@ -106,7 +106,7 @@ function construct_uncertainty_model(MVM::MVGPModel{T}, X_tr::Matrix{T}, Y_tr::M
     set_parameters!(MVMD, allpars; update_K = false)
 
     # @time train!(MVMD; ρ = KernelFlows.ρ_RMSE_no_LOO, niter = 20000, n = 80, ϵ = 1f-3,
-    @time train!(MVMD; ρ = KernelFlows.ρ_RMSE, niter = 10000, n = 80, ϵ = 1f-2,
+    @time train!(MVMD; ρ = KernelFlows.ρ_RMSE, niter = 5000, n = 80, ϵ = 1f-2,
                  optalg = :SGD, mbalg = :multicenter, mbargs = Dict(:nnb => 10),
                  # optalg = :AMSGrad, mbalg = :randompartitions,
                  quiet = true, update_K = true)
