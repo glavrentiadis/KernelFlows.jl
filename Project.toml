@@ -1,6 +1,6 @@
 name = "KernelFlows"
 uuid = "bb72a02f-58e8-4618-bba4-c562cfc9f034"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["Jouni Susiluoto <jouni.i.susiluoto@jpl.nasa.gov>"]
 
 [deps]
